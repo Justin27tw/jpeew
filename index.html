@@ -104,6 +104,11 @@
             margin-bottom: 20px;
             border: 1px solid #333;
             z-index: 1;
+            background-color: #1a1a1a;
+        }
+        /* 將免費 OpenStreetMap 圖磚轉為暗黑風格（不影響紅色震央標記） */
+        .leaflet-tile-pane {
+            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
         }
 
         /* 各縣市震度列表樣式 */
@@ -114,7 +119,7 @@
             margin-bottom: 20px;
             max-height: 220px;
             overflow-y: auto;
-            display: none; /* 有資料時才顯示 */
+            display: none;
         }
         .points-title {
             font-size: 15px;
@@ -212,13 +217,11 @@
     };
 
     // ================= 1. 地圖初始化 (Leaflet) =================
-    // 預設視角對準日本列島中心 (緯度 36.5, 經度 138.0)
     const map = L.map('map').setView([36.5, 138.0], 5);
     
-    // 使用 CartoDB Dark Matter 暗黑圖磚，與網頁深色主題一致
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OpenStreetMap &copy; CARTO',
-        subdomains: 'abcd',
+    // 改用完全免費、無需 API Key 的 OpenStreetMap 標準圖磚 (搭配 CSS 暗黑濾鏡)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 12
     }).addTo(map);
 
@@ -226,14 +229,11 @@
     let epicenterCircle = null;
 
     function updateMap(lat, lng, epicenterName, magnitude) {
-        // P2Pquake 若無經緯度會回傳 -200
         if (!lat || !lng || lat === -200 || lng === -200) return;
 
-        // 移除舊標記
         if (epicenterMarker) map.removeLayer(epicenterMarker);
         if (epicenterCircle) map.removeLayer(epicenterCircle);
 
-        // 繪製震央中心紅點與影響範圍圓圈
         epicenterMarker = L.circleMarker([lat, lng], {
             radius: 8,
             fillColor: "#ff1744",
@@ -247,12 +247,10 @@
             color: '#ff5252',
             fillColor: '#ff5252',
             fillOpacity: 0.25,
-            radius: 40000 // 40公里半徑視覺提示
+            radius: 40000
         }).addTo(map);
 
         epicenterMarker.bindPopup(`<b>震央：${epicenterName}</b><br>規模：M${magnitude}`).openPopup();
-        
-        // 平滑移動視角至震央
         map.flyTo([lat, lng], 7, { duration: 1.5 });
     }
 
@@ -308,7 +306,6 @@
         renderCard("🚨 模擬緊急地震速報 (測試)", nowStr, "東京灣 (模擬)", "7.2", "10km", "6強", true);
         updateMap(35.62, 139.88, "東京灣 (模擬)", "7.2");
         
-        // 模擬各縣市震度資料
         const mockPoints = [
             { pref: "東京都", scale: 60 },
             { pref: "神奈川県", scale: 55 },
@@ -331,7 +328,6 @@
             statusEl.className = "status connected";
             statusEl.innerHTML = '<span class="indicator"></span>已連線至 P2Pquake';
             addLog("系統", "WebSocket 連線成功，開始監聽推播");
-            // 連線成功後，順便抓取最近一筆歷史地震顯示在畫面上，避免畫面空白
             fetchLatestEarthquake();
         };
 
@@ -356,7 +352,6 @@
         };
     }
 
-    // 網頁剛開啟時，主動取得最新一筆已發生的地震情報填滿地圖與列表
     async function fetchLatestEarthquake() {
         try {
             const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1");
@@ -403,7 +398,7 @@
         
         renderCard("🚨 緊急地震速報 (EEW)", time, epicenter, magnitude, depth, "警報發布中", true);
         updateMap(hypocenter.latitude, hypocenter.longitude, epicenter, magnitude);
-        document.getElementById("pointsBox").style.display = "none"; // EEW階段尚無實測各縣市震度
+        document.getElementById("pointsBox").style.display = "none";
         
         addLog("EEW 發布", `震央: ${epicenter} (預估規模: M${magnitude})`);
         triggerAlarmSound();
@@ -432,7 +427,6 @@
             return;
         }
 
-        // 依都道府縣分組，並保留該縣市觀測到的最高震度
         const prefMaxScale = {};
         points.forEach(pt => {
             if (!pt.pref || !pt.scale) return;
@@ -441,14 +435,12 @@
             }
         });
 
-        // 依震度代碼進行分組 (例如: { 50: ["千葉県"], 40: ["東京都", "埼玉県"] })
         const scaleGroups = {};
         Object.entries(prefMaxScale).forEach(([pref, scale]) => {
             if (!scaleGroups[scale]) scaleGroups[scale] = [];
             scaleGroups[scale].push(pref);
         });
 
-        // 依照震度由大到小排序渲染
         const sortedScales = Object.keys(scaleGroups).map(Number).sort((a, b) => b - a);
         
         let html = "";
