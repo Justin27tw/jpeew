@@ -1,6 +1,7 @@
-日本地震速報監控中心 - 使用說明
+## 日本地震速報監控中心 - 使用說明
 
-檔案：index.html
+網址：
+https://jpeew.netlify.app/
 
 一、執行方式
 1. 將 JapanEarthquakeMonitor 資料夾解壓縮。
