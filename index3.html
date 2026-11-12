@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b1220">
+  <title>Japan Earthquake Monitor｜日本地震與緊急地震速報監控</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#0a111d; --panel:#121e2d; --panel2:#19283a; --panel3:#0d1724;
+      --line:#293b50; --text:#edf4fb; --muted:#91a4b9; --faint:#627990;
+      --green:#39cb91; --red:#ff5364; --orange:#ffb454; --blue:#68b5ff;
+      --cyan:#4ed5d0; --purple:#bb91ff;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:radial-gradient(ellipse at 15% 0%,#142941 0,transparent 34%),var(--bg);color:var(--text);font-family:Inter,"Segoe UI","Noto Sans TC",Arial,sans-serif}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    a{color:#8ec9ff;text-decoration:none}a:hover{text-decoration:underline}
+    .wrap{width:min(1580px,100%);margin:0 auto;padding:22px}
+    .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:17px}
+    .brand{display:flex;gap:13px;align-items:center}
+    .brand-mark{width:45px;height:45px;border-radius:13px;background:linear-gradient(145deg,#204c6f,#14263e);display:grid;place-items:center;font-size:23px;border:1px solid #376080;box-shadow:0 8px 24px #0005}
+    h1{margin:0;font-size:clamp(21px,3vw,30px);letter-spacing:.02em}
+    .subtitle{margin:5px 0 0;color:var(--muted);font-size:12px;letter-spacing:.08em}
+    .top-right{text-align:right;color:var(--muted);font-size:12px;line-height:1.7}
+    #clock{font-size:19px;color:var(--text);font-weight:750;font-variant-numeric:tabular-nums}
+    .toolbar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;background:#111d2bcc;border:1px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:14px}
+    .statusline{display:flex;flex-wrap:wrap;gap:16px;align-items:center}
+    .status{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-size:12px}
+    .dot{width:9px;height:9px;border-radius:50%;background:var(--orange);box-shadow:0 0 10px currentColor;flex:none}
+    .status.connected .dot{background:var(--green);color:var(--green)}.status.disconnected .dot{background:var(--red);color:var(--red)}
+    .status strong{color:var(--text);font-weight:650}
+    .actions{display:flex;gap:7px;flex-wrap:wrap}
+    .btn{border:1px solid #3a5069;background:#20334a;color:var(--text);padding:8px 11px;border-radius:9px;font-size:12px;font-weight:700;transition:.15s}
+    .btn:hover{filter:brightness(1.16);transform:translateY(-1px)}.btn:disabled{opacity:.55;cursor:wait;transform:none}
+    .btn.red{background:#50232d;border-color:#8c3e4b}.btn.green{background:#174735;border-color:#287b5b}.btn.blue{background:#1e3d61;border-color:#396997}.btn.ghost{background:#152335}
+    .notice{border:1px solid #735b31;background:#302819;color:#f4d9a6;border-radius:10px;padding:11px 14px;font-size:12px;line-height:1.65;margin-bottom:14px}
+    .notice strong{color:#ffe5b4}
+    .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin-bottom:14px}
+    .kpi{background:linear-gradient(145deg,#142236,#101a29);border:1px solid var(--line);border-radius:12px;padding:13px 14px;min-width:0}
+    .kpi-label{color:var(--muted);font-size:11px}.kpi-value{font-size:19px;font-weight:800;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}.kpi-sub{color:var(--faint);font-size:10px;margin-top:4px}
+    .layout{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(340px,.85fr);gap:14px;align-items:start}
+    .column{display:flex;flex-direction:column;gap:14px;min-width:0}
+    .panel{background:linear-gradient(145deg,#132033f5,#101a28f5);border:1px solid var(--line);border-radius:14px;padding:15px;min-width:0;box-shadow:0 10px 28px #0002}
+    .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+    .panel-head h2{font-size:14px;margin:0;font-weight:800}.panel-desc{color:var(--muted);font-size:10px;text-align:right}
+    .eew-card{border:1px solid #2e7357;border-left:5px solid var(--green);background:linear-gradient(120deg,#153b31,#172c31);border-radius:13px;padding:16px;margin-bottom:14px;min-height:154px}
+    .eew-card.warning{border-color:#8f3b4b;border-left-color:var(--red);background:linear-gradient(120deg,#45222c,#291d2b);animation:pulse 1.6s infinite}
+    .eew-card.cancelled{border-color:#745e36;border-left-color:var(--orange);background:linear-gradient(120deg,#3b3020,#252a30)}
+    .eew-card.test{border-color:#416b9b;border-left-color:var(--blue);background:linear-gradient(120deg,#1b3454,#1c2a3a)}
+    @keyframes pulse{0%{box-shadow:0 0 0 0 #ff536455}70%{box-shadow:0 0 0 10px #ff536400}100%{box-shadow:0 0 0 0 #ff536400}}
+    .card-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}.card-title{font-size:17px;margin:0;font-weight:850}.pill{border:1px solid currentColor;border-radius:30px;padding:4px 8px;font-size:10px;white-space:nowrap}
+    .data-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.data-cell{border-top:1px solid #ffffff20;padding-top:8px;min-width:0}.data-label{display:block;color:#a4b6c9;font-size:10px;margin-bottom:5px}.data-value{display:block;font-weight:750;font-size:13px;overflow-wrap:anywhere}
+    #map{height:500px;width:100%;border:1px solid var(--line);border-radius:11px;background:#101a27;z-index:1}
+    .map-tools{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.map-note{font-size:10px;color:var(--muted);line-height:1.5;margin-top:8px}
+    .legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:10px;margin-top:9px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+    .area-list,.point-list,.history-list,.timeline-list,.tsunami-list{display:flex;flex-direction:column;gap:7px;max-height:390px;overflow:auto;padding-right:3px}
+    .item{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--panel2);border:1px solid #2b4058;border-radius:9px;padding:9px 10px;min-width:0}
+    .item.highlight{border-color:#bd6c42;background:#392a26}.item-main{min-width:0}.item-title{font-size:12px;font-weight:750;overflow-wrap:anywhere}.item-meta{font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5;overflow-wrap:anywhere}
+    .scale{min-width:54px;text-align:center;border-radius:7px;padding:5px 6px;font-size:11px;font-weight:850;white-space:nowrap;background:#34475b;color:white;flex:none}
+    .scale-10{background:#566a80}.scale-20{background:#2f73b8}.scale-30{background:#328a59}.scale-40{background:#e2bf43;color:#171717}.scale-45,.scale-50{background:#e27b24}.scale-55,.scale-60{background:#ca3949}.scale-70{background:#8d3fb5}.scale-46{background:#975b32}.scale-99{background:#7d3a9d}
+    .empty{font-size:12px;color:var(--muted);padding:13px 2px;line-height:1.6}
+    .bar-chart{display:flex;flex-direction:column;gap:8px}.bar-row{display:grid;grid-template-columns:58px 1fr 28px;gap:8px;align-items:center;font-size:10px;color:var(--muted)}.bar-track{height:9px;border-radius:99px;background:#26374b;overflow:hidden}.bar-fill{height:100%;border-radius:99px;background:linear-gradient(90deg,#3988be,#59b5d4);min-width:2px}.bar-fill.forecast{background:linear-gradient(90deg,#df8d38,#f4c15e)}.bar-count{text-align:right;font-variant-numeric:tabular-nums}
+    .watch-controls{display:grid;grid-template-columns:1fr auto;gap:8px}.input{width:100%;background:#0d1826;color:var(--text);border:1px solid #334b64;border-radius:8px;padding:9px 10px;font-size:12px;min-width:0}.hint{color:var(--muted);font-size:10px;line-height:1.6;margin-top:7px}.watch-match{border:1px solid #8a6039;background:#392c21;border-radius:10px;padding:10px;margin-top:10px}.watch-match strong{font-size:12px}
+    .countdown{font-size:12px;font-weight:850;color:#ffd18b;font-variant-numeric:tabular-nums;margin-top:4px}.countdown.past{color:#aebdca}
+    .tsunami-banner{border-radius:10px;padding:12px;border:1px solid #375a7b;background:#162d45;margin-bottom:10px}.tsunami-banner.danger{border-color:#a44953;background:#401f2a}.tsunami-banner.warning{border-color:#9c7040;background:#3b2e20}.tsunami-banner.watch{border-color:#397b8d;background:#183642}.tsunami-banner h3{margin:0 0 5px;font-size:14px}.tsunami-banner p{margin:0;color:#c6d4e2;font-size:11px;line-height:1.6}
+    .timeline-item{display:grid;grid-template-columns:78px 1fr;gap:10px;padding:8px 0;border-bottom:1px solid #ffffff12}.timeline-time{color:#85bce8;font-size:10px;font-variant-numeric:tabular-nums}.timeline-title{font-size:11px;font-weight:750}.timeline-desc{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.5}
+    .source-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.source-link{display:block;background:#192a3c;border:1px solid #31475f;border-radius:9px;padding:10px;font-size:11px}.source-link small{display:block;color:var(--muted);font-size:9px;margin-top:4px;line-height:1.4}
+    .longperiod{background:#101d2a;border:1px dashed #3b526b;border-radius:10px;padding:12px}.longperiod strong{font-size:12px}.longperiod p{font-size:10px;color:var(--muted);line-height:1.6;margin:6px 0 0}
+    .log{height:180px;overflow:auto;background:#0a131e;border:1px solid #24364b;border-radius:9px;padding:9px 11px;font:10px/1.6 Consolas,monospace}.log-entry{padding:4px 0;border-bottom:1px solid #ffffff0c;overflow-wrap:anywhere}.log-time{color:#76b7ed}.log-type{color:#e8c16f}
+    .footer{font-size:10px;color:#71869b;line-height:1.7;margin:14px 2px 0}.footer strong{color:#a7b8c8}
+    .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:#17283a;color:#edf4fb}.leaflet-control-attribution{font-size:9px!important}
+    @media(max-width:1050px){.layout{grid-template-columns:1fr}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#map{height:430px}}
+    @media(max-width:620px){.wrap{padding:10px}.topbar{flex-direction:column}.top-right{text-align:left}.toolbar{align-items:flex-start}.actions{width:100%}.actions .btn{flex:1}.data-grid{grid-template-columns:repeat(2,minmax(0,1fr))}#map{height:350px}.panel{padding:12px}.kpi-value{font-size:16px}.source-grid{grid-template-columns:1fr}.card-title{font-size:15px}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <header class="topbar">
+    <div class="brand"><div class="brand-mark">震</div><div><h1>日本地震速報監控中心</h1><p class="subtitle">JAPAN EARTHQUAKE &amp; EEW LIVE MONITOR</p></div></div>
+    <div class="top-right"><div id="clock">--:--:--</div><div>本地時間（瀏覽器時區）｜Japan region monitoring</div></div>
+  </header>
+
+  <section class="toolbar">
+    <div class="statusline">
+      <div id="connectionStatus" class="status disconnected"><i class="dot"></i><span id="connectionText">正在連線…</span></div>
+      <div class="status">最後接收：<strong id="lastMessage">尚無資料</strong></div>
+      <div class="status">接收間隔：<strong id="receiveLag">—</strong></div>
+      <div class="status">P2P 節點：<strong id="peerCount">—</strong></div>
+    </div>
+    <div class="actions">
+      <button id="soundBtn" class="btn red" type="button">🔇 開啟警報音效</button>
+      <button id="notifyBtn" class="btn ghost" type="button">🔔 啟用桌面通知</button>
+      <button id="testBtn" class="btn blue" type="button">測試警報</button>
+      <button id="refreshBtn" class="btn ghost" type="button">↻ 更新歷史</button>
+    </div>
+  </section>
+
+  <div class="notice"><strong>防災安全聲明：</strong>本網站為個人資訊整合與展示工具，使用 P2P地震情報轉發資料，並非日本氣象廳官方警報設備。資料可能延遲、遺失或中斷，不能取代日本氣象廳、地方政府、手機官方緊急速報及現場廣播。請勿因本網站未顯示警報而認定安全。</div>
+
+  <section class="kpis">
+    <div class="kpi"><div class="kpi-label">緊急地震速報 EEW</div><div class="kpi-value" id="kpiEew">監聽中</div><div class="kpi-sub" id="kpiEewSub">等待 556 推播</div></div>
+    <div class="kpi"><div class="kpi-label">海嘯預報</div><div class="kpi-value" id="kpiTsunami">尚無有效資訊</div><div class="kpi-sub" id="kpiTsunamiSub">等待 552 推播</div></div>
+    <div class="kpi"><div class="kpi-label">最近地震資訊</div><div class="kpi-value" id="kpiQuake">尚無資料</div><div class="kpi-sub" id="kpiQuakeSub">等待 551 推播</div></div>
+    <div class="kpi"><div class="kpi-label">資料接收狀態</div><div class="kpi-value" id="kpiFeed">尚未接收</div><div class="kpi-sub" id="kpiFeedSub">WebSocket 狀態與資料時間分開判斷</div></div>
+  </section>
+
+  <section id="mainAlert" class="eew-card">
+    <div class="card-top"><h2 class="card-title" id="mainAlertTitle">等待地震速報資料</h2><span class="pill" id="mainAlertPill">監聽中</span></div>
+    <div class="data-grid" id="mainAlertData">
+      <div class="data-cell"><span class="data-label">資料狀態</span><span class="data-value">等待 P2Pquake 推播</span></div>
+      <div class="data-cell"><span class="data-label">速報種類</span><span class="data-value">EEW 556</span></div>
+      <div class="data-cell"><span class="data-label">安全提醒</span><span class="data-value">以官方資訊與現場狀況為準</span></div>
+    </div>
+  </section>
+
+  <div class="layout">
+    <div class="column">
+      <section class="panel">
+        <div class="panel-head"><h2>🗾 日本地震位置與傳播示意</h2><span class="panel-desc">震央標記非震度範圍</span></div>
+        <div id="map" aria-label="日本地震震央地圖"></div>
+        <div class="legend"><span><i style="background:#ff4358"></i>速報／地震震央</span><span><i style="background:#ffc15e"></i>P 波示意圈</span><span><i style="background:#61b5ff"></i>S 波示意圈</span></div>
+        <div class="map-tools"><button id="waveBtn" class="btn ghost" type="button">▶ P／S 波概念動畫</button><button id="stopWaveBtn" class="btn ghost" type="button">停止動畫</button><button id="resetMapBtn" class="btn ghost" type="button">回到日本全圖</button></div>
+        <div class="map-note">P／S 波動畫僅為教學示意，採用假設速度呈現圓形擴散，不代表當次地震的實測波前、實際傳播速度或到達倒數。地圖上的震央位置來自收到的地震報文。</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>🚨 EEW 預估影響區域</h2><span class="panel-desc">來源：556 · areas</span></div>
+        <div id="eewAreas" class="area-list"><div class="empty">目前沒有 EEW 預估區域資料。</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>📍 關注地區預警</h2><span class="panel-desc">比對 556 預報區域</span></div>
+        <div class="watch-controls"><input id="watchInput" class="input" type="text" placeholder="輸入區域關鍵字，以逗號分隔，例如：東京地方, 神奈川県東部"><button id="saveWatchBtn" class="btn blue" type="button">儲存</button></div>
+        <div class="hint">請使用速報資料中的區域名稱（例如「東京地方」、「千葉県北西部」）。這是文字比對，不是 GPS 定位；未匹配到不代表安全。</div>
+        <div id="watchResults" class="watch-match"><strong>尚未設定關注區域</strong><div class="item-meta">設定後，系統會在新速報中標示匹配區域及資料提供的主要動到達時間。</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>📊 實際觀測震度分布</h2><span class="panel-desc">來源：551 · points</span></div>
+        <div id="observedChart" class="bar-chart"><div class="empty">尚無觀測震度資料。</div></div>
+        <div id="observedPoints" class="point-list" style="margin-top:12px"><div class="empty">尚無各地觀測震度。</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>🕒 地震／速報事件時間軸</h2><span class="panel-desc">即時事件與歷史載入</span></div>
+        <div id="timeline" class="timeline-list"><div class="empty">尚無事件紀錄。</div></div>
+      </section>
+    </div>
+
+    <aside class="column">
+      <section class="panel">
+        <div class="panel-head"><h2>🌊 海嘯預報監控</h2><span class="panel-desc">來源：552</span></div>
+        <div id="tsunamiBanner" class="tsunami-banner"><h3>尚無有效海嘯預報</h3><p>等待 P2Pquake 即時推播。請勿將「目前沒有資料」解讀為沒有海嘯風險。</p></div>
+        <div id="tsunamiAreas" class="tsunami-list"><div class="empty">尚無海嘯預報區域。</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>🏙️ 長周期地震動</h2><span class="panel-desc">高樓層風險參考</span></div>
+        <div class="longperiod"><strong id="longPeriodState">目前沒有接入長周期地震動觀測資料</strong><p>目前使用的 P2Pquake 551／552／554／556 欄位不足以可靠呈現長周期地震動階級。本區不會以一般震度代替長周期階級。地震後請查閱日本氣象廳的長周期地震動觀測資訊。</p><p><a href="https://www.data.jma.go.jp/eew/data/ltpgm/latest.php" target="_blank" rel="noopener">開啟 JMA 最新長周期地震動觀測結果 ↗</a></p></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>📚 最近地震紀錄</h2><span class="panel-desc">最多 12 筆</span></div>
+        <div id="historyList" class="history-list"><div class="empty">正在讀取歷史資料…</div></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>📡 資料來源與官方資訊</h2><span class="panel-desc">外部官方頁面</span></div>
+        <div class="source-grid">
+          <a class="source-link" href="https://www.jma.go.jp/bosai/map.html#contents=earthquake_map" target="_blank" rel="noopener">JMA 地震資訊<small>官方地震資訊地圖</small></a>
+          <a class="source-link" href="https://www.jma.go.jp/bosai/map.html#contents=estimated_intensity_map" target="_blank" rel="noopener">推計震度分布<small>震後推計資料，非速報預測圖</small></a>
+          <a class="source-link" href="https://www.jma.go.jp/bosai/map.html#contents=tsunami" target="_blank" rel="noopener">JMA 海嘯資訊<small>官方海嘯預報與警報</small></a>
+          <a class="source-link" href="https://www.data.jma.go.jp/eew/data/ltpgm/latest.php" target="_blank" rel="noopener">長周期地震動<small>JMA 最新觀測結果</small></a>
+          <a class="source-link" href="https://www.jma.go.jp/bosai/warning/" target="_blank" rel="noopener">JMA 防災警報<small>官方各類防災警報</small></a>
+          <a class="source-link" href="https://www.p2pquake.com/develop/json_api_v2/" target="_blank" rel="noopener">P2Pquake API 規格<small>本頁即時資料轉發來源</small></a>
+        </div>
+        <div class="hint">注意：P2Pquake 的 `/jma/quake`、`/jma/tsunami` 歷史端點約有 60 秒延遲，故本頁即時接收使用 WebSocket；歷史資料只用於補充查閱。</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>🧰 系統通訊日誌</h2><span class="panel-desc">最新紀錄在上方</span></div>
+        <div id="log" class="log" aria-live="polite"></div>
+      </section>
+    </aside>
+  </div>
+
+  <p class="footer"><strong>使用限制：</strong>P2Pquake API v2 的 WebSocket 可能重複推送相同資料，建議依 `id` 去重；每個 IP 的 WebSocket 連線數有限，請避免同時開啟多個本頁分頁。P2Pquake 的 EEW 轉發資料內容與配信品質無保證，不建議作為正式緊急警報唯一來源。地震波示意動畫不是預測模型；觀測震度、預測區域、推計震度及長周期地震動為不同資料，不應混為一談。</p>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+'use strict';
+
+const CONFIG = {
+  wsUrl: 'wss://api.p2pquake.net/v2/ws',
+  historyUrl: 'https://api.p2pquake.net/v2/history',
+  historyLimit: 12,
+  reconnectBaseMs: 2000,
+  reconnectMaxMs: 30000,
+  staleAfterMs: 90000
+};
+
+const SCALE = {
+  0: '0', 10: '1', 20: '2', 30: '3', 40: '4', 45: '5弱', 46: '5弱以上推定',
+  50: '5強', 55: '6弱', 60: '6強', 70: '7', 99: '程度以上'
+};
+const $ = (id) => document.getElementById(id);
+let socket = null, reconnectTimer = null, reconnectCount = 0, audioContext = null;
+let soundEnabled = false, notificationEnabled = false, lastReceiveTime = null, historyLoadedOnce = false;
+let currentEEW = null, currentTsunami = null, latestQuake = null;
+let latestObservedPoints = [], timelineEvents = [], historyItems = [];
+let peerTotal = null, seenMessageIds = new Set(), alarmedReports = new Set();
+let watchKeywords = [];
+let waveTimer = null, waveStartedAt = null, waveP = null, waveS = null;
+
+// 日本震度顏色；P2Pquake 使用 10、20、30… 等整數代碼。
+function scaleLabel(value) {
+  if (value === null || value === undefined || value === '') return '不明';
+  const n = Math.floor(Number(value));
+  return Object.prototype.hasOwnProperty.call(SCALE, n) ? SCALE[n] : '不明';
+}
+function scaleClass(value) {
+  const n = Math.floor(Number(value));
+  return [0,10,20,30,40,45,46,50,55,60,70,99].includes(n) ? `scale-${n}` : '';
+}
+function makeScaleBadge(value, label) {
+  const el = document.createElement('span');
+  el.className = `scale ${scaleClass(value)}`.trim();
+  el.textContent = label || scaleLabel(value);
+  return el;
+}
+function safeText(value, fallback = '未提供') {
+  return value === null || value === undefined || value === '' ? fallback : String(value);
+}
+function parseJstDate(value) {
+  if (!value || typeof value !== 'string') return null;
+  // P2Pquake 時間字串以日本時間呈現；明確補上 JST +09:00，避免依使用者電腦時區誤解析。
+  const normalized = value.trim();
+  const m = normalized.match(/^(\d{4})[/-](\d{1,2})[/-](\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/);
+  if (!m) {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  const [,y,mo,d,h,mi,s='0',ms='0'] = m;
+  return Date.parse(`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(h).padStart(2,'0')}:${mi}:${s.padStart(2,'0')}.${ms.padEnd(3,'0')}+09:00`);
+}
+function formatTime(value, includeDate = true) {
+  const ts = parseJstDate(value);
+  if (ts === null) return safeText(value);
+  return new Intl.DateTimeFormat('zh-TW', { timeZone: 'Asia/Taipei', ...(includeDate ? { month:'2-digit', day:'2-digit' } : {}), hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false }).format(new Date(ts));
+}
+function formatMagnitude(value) {
+  const n = Number(value);
+  return value === null || value === undefined || value === '' || !Number.isFinite(n) || n < 0 ? '未知' : `M${n.toFixed(1)}`;
+}
+function formatDepth(value) {
+  const n = Number(value);
+  if (value === null || value === undefined || value === '' || !Number.isFinite(n) || n < 0) return '未知';
+  return n === 0 ? '極淺' : `${Math.floor(n)} km`;
+}
+function addLog(type, message) {
+  const log = $('log');
+  const row = document.createElement('div'); row.className = 'log-entry';
+  const time = document.createElement('span'); time.className = 'log-time';
+  time.textContent = `[${new Date().toLocaleTimeString('zh-TW',{hour12:false})}] `;
+  const label = document.createElement('span'); label.className = 'log-type'; label.textContent = `[${type}] `;
+  const text = document.createElement('span'); text.textContent = String(message);
+  row.append(time,label,text); log.prepend(row);
+  while (log.children.length > 120) log.lastElementChild.remove();
+}
+function emptyNode(message) { const d=document.createElement('div'); d.className='empty'; d.textContent=message; return d; }
+function setConnection(state, message) {
+  $('connectionStatus').className = `status ${state}`;
+  $('connectionText').textContent = message;
+  $('kpiFeed').textContent = state === 'connected' ? '連線正常' : state === 'disconnected' ? '連線中斷' : '連線中';
+  $('kpiFeedSub').textContent = lastReceiveTime ? `最後接收 ${new Date(lastReceiveTime).toLocaleTimeString('zh-TW',{hour12:false})}` : '尚未收到推播資料';
+}
+function updateReceiveStats(data) {
+  lastReceiveTime = Date.now();
+  $('lastMessage').textContent = new Date(lastReceiveTime).toLocaleTimeString('zh-TW',{hour12:false});
+  $('kpiFeedSub').textContent = '最近已收到推播資料';
+  const sourceTime = parseJstDate(data.time);
+  $('receiveLag').textContent = sourceTime === null ? '無時間欄位' : `${Math.max(0, (Date.now()-sourceTime)/1000).toFixed(1)} 秒*`;
+}
+
+// 地圖：只標示實際報文提供的震央座標；不繪製固定半徑影響圈。
+const map = L.map('map', { scrollWheelZoom: true }).setView([36.5,138.0],5);
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom:18, attribution:'&copy; OpenStreetMap contributors'
+}).addTo(map);
+let epicenterMarker = null, lastMapPoint = null;
+function updateEpicenter(lat,lng,name,magnitude,kind='地震') {
+  const y=Number(lat), x=Number(lng);
+  if (!Number.isFinite(y)||!Number.isFinite(x)||y===-200||x===-200||Math.abs(y)>90||Math.abs(x)>180) return false;
+  const point=L.latLng(y,x);
+  const popup=document.createElement('div');
+  const strong=document.createElement('strong'); strong.textContent=`${kind}：${safeText(name,'未知')}`;
+  const line=document.createElement('div'); line.textContent=`規模：${magnitude}`;
+  popup.append(strong,line);
+  if (!epicenterMarker) epicenterMarker=L.circleMarker(point,{radius:9,color:'#fff',weight:2,fillColor:'#ff4358',fillOpacity:.95}).addTo(map);
+  else epicenterMarker.setLatLng(point);
+  epicenterMarker.bindPopup(popup);
+  if (!lastMapPoint || map.distance(lastMapPoint,point)>5000) map.flyTo(point,7,{duration:1.1});
+  lastMapPoint=point;
+  return true;
+}
+function resetMap() { map.setView([36.5,138.0],5); }
+
+// 只供教學使用的 P/S 波動畫：速度為假設值，不提供實際到達預測。
+function stopWaveDemo() {
+  if (waveTimer) clearInterval(waveTimer); waveTimer=null;
+  if (waveP) map.removeLayer(waveP); if (waveS) map.removeLayer(waveS);
+  waveP=null; waveS=null; waveStartedAt=null;
+}
+function startWaveDemo() {
+  if (!lastMapPoint) { addLog('波傳播示意','請先接收或點選一筆具有震央座標的地震資料。'); return; }
+  stopWaveDemo();
+  waveStartedAt=Date.now();
+  waveP=L.circle(lastMapPoint,{radius:1000,color:'#ffc15e',weight:2,fillOpacity:.03,dashArray:'5 7'}).addTo(map);
+  waveS=L.circle(lastMapPoint,{radius:500,color:'#61b5ff',weight:2,fillOpacity:.03,dashArray:'5 7'}).addTo(map);
+  addLog('波傳播示意','已啟動概念動畫；非實際觀測或預測。');
+  waveTimer=setInterval(()=>{
+    const elapsed=(Date.now()-waveStartedAt)/1000;
+    // 假設速度 6.0 km/s 與 3.5 km/s，僅用於展示波速差異。
+    waveP.setRadius(Math.max(1000,elapsed*6000));
+    waveS.setRadius(Math.max(500,elapsed*3500));
+    if (elapsed>=30) stopWaveDemo();
+  },150);
+}
+
+// 音效：必須由使用者點擊啟用，避免瀏覽器自動播放限制。
+async function toggleSound() {
+  try {
+    if (!audioContext) audioContext=new (window.AudioContext||window.webkitAudioContext)();
+    if (audioContext.state==='suspended') await audioContext.resume();
+    soundEnabled=!soundEnabled;
+    $('soundBtn').textContent=soundEnabled?'🔊 警報音效已開啟':'🔇 開啟警報音效';
+    $('soundBtn').classList.toggle('green',soundEnabled); $('soundBtn').classList.toggle('red',!soundEnabled);
+    addLog('音效',soundEnabled?'已開啟':'已關閉');
+    if(soundEnabled) tone(660,audioContext.currentTime,.12);
+  } catch(e) { addLog('音效錯誤',e.message||'瀏覽器無法啟用音效'); }
+}
+function tone(freq,start,duration,volume=.18) {
+  if(!audioContext)return;
+  const osc=audioContext.createOscillator(), gain=audioContext.createGain();
+  osc.type='triangle'; osc.frequency.setValueAtTime(freq,start);
+  gain.gain.setValueAtTime(.004,start); gain.gain.linearRampToValueAtTime(volume,start+.02); gain.gain.exponentialRampToValueAtTime(.004,start+duration);
+  osc.connect(gain); gain.connect(audioContext.destination); osc.start(start); osc.stop(start+duration);
+}
+function playEewAlarm(update=false) {
+  if(!soundEnabled||!audioContext)return;
+  const now=audioContext.currentTime;
+  if(update){ tone(740,now,.14,.14); tone(980,now+.17,.16,.14); return; }
+  for(let i=0;i<3;i++){ const t=now+i*.54; tone(880,t,.2,.2); tone(659.25,t+.22,.22,.2); }
+}
+function playTsunamiAlarm() {
+  if(!soundEnabled||!audioContext)return;
+  const now=audioContext.currentTime;
+  for(let i=0;i<4;i++) tone(520,now+i*.42,.25,.2);
+}
+async function toggleNotifications() {
+  if(!('Notification' in window)){ addLog('通知','此瀏覽器不支援桌面通知'); return; }
+  if(Notification.permission==='default') {
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted'){ addLog('通知','使用者未授權桌面通知'); return; }
+  }
+  notificationEnabled=Notification.permission==='granted';
+  $('notifyBtn').textContent=notificationEnabled?'🔔 桌面通知已授權':'🔔 啟用桌面通知';
+  $('notifyBtn').classList.toggle('green',notificationEnabled);
+  if(notificationEnabled) notifyUser('通知測試','桌面通知已啟用。實際速報仍以官方資訊為準。');
+}
+function notifyUser(title,body) {
+  if(!notificationEnabled||Notification.permission!=='granted'||document.visibilityState==='visible')return;
+  try { new Notification(title,{body,tag:'japan-eew-monitor'}); } catch(e) { addLog('通知錯誤',e.message); }
+}
+
+// 共用卡片元件：使用 textContent，避免把外部資料當成 HTML 執行。
+function renderMainAlert({title,pill,type='',rows=[]}) {
+  const card=$('mainAlert'); card.className=`eew-card ${type}`.trim();
+  $('mainAlertTitle').textContent=title; $('mainAlertPill').textContent=pill;
+  const target=$('mainAlertData'); target.replaceChildren();
+  rows.forEach(([label,value])=>{
+    const cell=document.createElement('div'); cell.className='data-cell';
+    const lab=document.createElement('span'); lab.className='data-label'; lab.textContent=label;
+    const val=document.createElement('span'); val.className='data-value'; val.textContent=safeText(value);
+    cell.append(lab,val); target.append(cell);
+  });
+}
+function pushTimeline(title,description,sourceTime,level='info') {
+  const time=sourceTime||new Date().toISOString();
+  timelineEvents.unshift({title,description,time,level});
+  timelineEvents=timelineEvents.slice(0,80);
+  renderTimeline();
+}
+function renderTimeline() {
+  const box=$('timeline'); box.replaceChildren();
+  if(!timelineEvents.length){box.append(emptyNode('尚無事件紀錄。'));return;}
+  timelineEvents.forEach(evt=>{
+    const row=document.createElement('div');row.className='timeline-item';
+    const t=document.createElement('div');t.className='timeline-time';t.textContent=formatTime(evt.time,false);
+    const body=document.createElement('div');
+    const title=document.createElement('div');title.className='timeline-title';title.textContent=evt.title;
+    const desc=document.createElement('div');desc.className='timeline-desc';desc.textContent=evt.description;
+    body.append(title,desc);row.append(t,body);box.append(row);
+  });
+}
+function stableMessageKey(data) {
+  if(data.id)return String(data.id);
+  const issue=data.issue||{};
+  return `${data.code}|${issue.eventId||''}|${issue.serial||''}|${data.time||issue.time||''}`;
+}
+function rememberMessage(data) {
+  const key=stableMessageKey(data);
+  if(seenMessageIds.has(key))return false;
+  seenMessageIds.add(key);
+  if(seenMessageIds.size>1500) seenMessageIds=new Set([...seenMessageIds].slice(-800));
+  return true;
+}
+
+// 551：地震資訊／實際觀測震度。這裡不觸發 EEW 警報音。
+function handleQuake(data,isLive=true) {
+  const eq=data.earthquake||{}, hypo=eq.hypocenter||{}, issue=data.issue||{};
+  latestQuake=data; latestObservedPoints=Array.isArray(data.points)?data.points:[];
+  const place=safeText(hypo.name,'震央未明');
+  const max=scaleLabel(eq.maxScale);
+  $('kpiQuake').textContent=`${place}`;
+  $('kpiQuakeSub').textContent=`${formatMagnitude(hypo.magnitude)}｜最大觀測震度 ${max}`;
+  renderObservedPoints(latestObservedPoints);
+  renderObservedChart(latestObservedPoints);
+  updateEpicenter(hypo.latitude,hypo.longitude,place,formatMagnitude(hypo.magnitude),'觀測地震');
+  if(!currentEEW) {
+    renderMainAlert({title:isLive?'地震資訊（一般觀測）':'最近地震資訊（歷史資料）',pill:'一般地震資訊 · 551',type:'',rows:[
+      ['地震發生時間',eq.time||issue.time],['震央位置',place],['規模／深度',`${formatMagnitude(hypo.magnitude)}／${formatDepth(hypo.depth)}`],
+      ['最大觀測震度',max],['資訊種類',issue.type],['資料發布時間',issue.time||data.time]
+    ]});
+  }
+  if(isLive){
+    addLog('地震資訊 551',`${place}｜${formatMagnitude(hypo.magnitude)}｜最大震度 ${max}`);
+    pushTimeline('一般地震資訊（551）',`${place}｜${formatMagnitude(hypo.magnitude)}｜最大觀測震度 ${max}`,issue.time||data.time);
+  }
+}
+function renderObservedPoints(points) {
+  const box=$('observedPoints');box.replaceChildren();
+  if(!points.length){box.append(emptyNode('這筆 551 資料沒有可顯示的觀測點。'));return;}
+  const rows=[...points].filter(p=>p&&Number.isFinite(Number(p.scale))).sort((a,b)=>Number(b.scale)-Number(a.scale));
+  if(!rows.length){box.append(emptyNode('沒有可辨識的觀測震度。'));return;}
+  rows.slice(0,40).forEach(p=>{
+    const item=document.createElement('div');item.className='item';
+    const text=document.createElement('div');text.className='item-main';
+    const title=document.createElement('div');title.className='item-title';title.textContent=safeText(p.addr,'觀測區域');
+    const meta=document.createElement('div');meta.className='item-meta';meta.textContent=`${safeText(p.pref,'縣市')}｜${p.isArea?'區域資料':'測站資料'}`;
+    text.append(title,meta);item.append(text,makeScaleBadge(p.scale));box.append(item);
+  });
+}
+function renderObservedChart(points) {
+  const box=$('observedChart');box.replaceChildren();
+  if(!points.length){box.append(emptyNode('尚無觀測震度資料。'));return;}
+  const counts=new Map();points.forEach(p=>{if(p&&Number.isFinite(Number(p.scale))){const k=Math.floor(Number(p.scale));counts.set(k,(counts.get(k)||0)+1);}});
+  const ordered=[...counts.entries()].sort((a,b)=>a[0]-b[0]);
+  const max=Math.max(1,...ordered.map(x=>x[1]));
+  ordered.forEach(([scale,count])=>{
+    const row=document.createElement('div');row.className='bar-row';
+    const label=document.createElement('span');label.textContent=`震度 ${scaleLabel(scale)}`;
+    const track=document.createElement('div');track.className='bar-track';
+    const fill=document.createElement('div');fill.className='bar-fill';fill.style.width=`${count/max*100}%`;track.append(fill);
+    const c=document.createElement('span');c.className='bar-count';c.textContent=String(count);
+    row.append(label,track,c);box.append(row);
+  });
+}
+
+// 556：緊急地震速報（警報）。使用 id 去重，另用 eventId+serial 區分速報更新。
+function handleEEW(data,isLive=true) {
+  const issue=data.issue||{}, eventId=safeText(issue.eventId,'事件編號未知'), serial=safeText(issue.serial,'報數未知');
+  const reportKey=`${eventId}:${serial}`;
+  if(data.cancelled===true) {
+    const cancelledFor=currentEEW?.issue?.eventId===issue.eventId || !currentEEW;
+    if(isLive && cancelledFor) currentEEW=null;
+    renderMainAlert({title:'緊急地震速報已取消',pill:'取消報文 · 556',type:'cancelled',rows:[
+      ['事件編號',eventId],['速報編號',serial],['取消發布時間',issue.time],['處理狀態','已收到取消報文；請繼續留意官方資訊']
+    ]});
+    $('kpiEew').textContent='速報已取消';$('kpiEewSub').textContent=`${eventId}｜報數 ${serial}`;
+    $('eewAreas').replaceChildren(emptyNode('此速報已取消。取消報文不代表其他地震或海嘯風險已解除。'));
+    renderWatchResults([]);
+    if(isLive){addLog('EEW 取消',`${eventId}｜報數 ${serial}`);pushTimeline('緊急地震速報取消（556）',`${eventId}｜報數 ${serial}`,issue.time,'warning');}
+    return;
+  }
+  const eq=data.earthquake||{}, hypo=eq.hypocenter||{}, areas=Array.isArray(data.areas)?data.areas:[];
+  const place=safeText(hypo.name,'震央預估中'), isTest=data.test===true;
+  if(isLive) currentEEW=data;
+  updateEpicenter(hypo.latitude,hypo.longitude,place,formatMagnitude(hypo.magnitude),'EEW 震央');
+  renderMainAlert({title:isTest?'緊急地震速報（測試資料）':'🚨 緊急地震速報（警報）',pill:isTest?'測試資料 · 556':'警報發布中 · 556',type:isTest?'test':'warning',rows:[
+    ['地震發生時間',eq.originTime],['震央位置',place],['規模／深度',`${formatMagnitude(hypo.magnitude)}／${formatDepth(hypo.depth)}`],
+    ['事件編號',eventId],['速報編號',serial],['發布時間',issue.time],['資料狀態',isTest?'測試資料，不代表實際地震':(eq.condition||'速報轉發資料')],['區域筆數',areas.length]
+  ]});
+  $('kpiEew').textContent=isTest?'測試速報':'速報發布中';$('kpiEewSub').textContent=`${eventId}｜第 ${serial} 報`;
+  renderEEWAreas(areas);renderWatchResults(areas);
+  if(isLive){
+    addLog(isTest?'EEW 測試':'EEW 發布',`${place}｜事件 ${eventId}｜報數 ${serial}`);
+    pushTimeline(isTest?'EEW 測試資料（556）':'緊急地震速報（556）',`${place}｜第 ${serial} 報｜預報區域 ${areas.length} 處`,issue.time,'warning');
+    if(!isTest && !alarmedReports.has(reportKey)){
+      const isUpdate=[...alarmedReports].some(x=>x.startsWith(`${eventId}:`));
+      alarmedReports.add(reportKey);playEewAlarm(isUpdate);
+      notifyUser('日本緊急地震速報',`${place}｜第 ${serial} 報。請立即確認官方資訊並採取安全行動。`);
+    }
+  }
+}
+function formatKindCode(code) {
+  const dict={'10':'預測主要動尚未到達','11':'資料判定主要動可能已到達','19':'PLUM 法預測／未提供到達時間'};
+  return dict[String(code)]||`種類代碼 ${safeText(code)}`;
+}
+function renderEEWAreas(areas) {
+  const box=$('eewAreas');box.replaceChildren();
+  if(!areas.length){box.append(emptyNode('本次 EEW 沒有提供可顯示的預報區域。'));return;}
+  areas.forEach(area=>{
+    const row=document.createElement('div');row.className='item';
+    const main=document.createElement('div');main.className='item-main';
+    const title=document.createElement('div');title.className='item-title';title.textContent=`${safeText(area.pref,'預報區')} · ${safeText(area.name,'區域名稱未提供')}`;
+    const meta=document.createElement('div');meta.className='item-meta';meta.textContent=`主要動狀態：${area.kindCode?formatKindCode(area.kindCode):'未提供'}｜資料到達預估：${area.arrivalTime?formatTime(area.arrivalTime):'未提供'}`;
+    const countdown=document.createElement('div');countdown.className='countdown';countdown.dataset.arrival=area.arrivalTime||'';countdown.dataset.kind=area.kindCode||'';countdown.textContent=arrivalText(area.arrivalTime,area.kindCode);
+    main.append(title,meta,countdown);
+    const badge=makeScaleBadge(area.scaleFrom,`震度 ${formatScaleRange(area.scaleFrom,area.scaleTo)}`);
+    row.append(main,badge);box.append(row);
+  });
+}
+function formatScaleRange(a,b) { const x=scaleLabel(a),y=scaleLabel(b);return x===y?x:`${x}～${y}`; }
+function arrivalText(arrivalTime,kindCode) {
+  if(String(kindCode)==='11')return '資料標示：主要動可能已到達';
+  if(String(kindCode)==='19')return 'PLUM 類型：沒有可用的到達倒數';
+  const ts=parseJstDate(arrivalTime);
+  if(!arrivalTime||ts===null)return '主要動到達時間：未提供，無法倒數';
+  const diff=ts-Date.now();
+  if(diff<=0)return '預估到達時刻已過（非實測到達確認）';
+  const sec=Math.ceil(diff/1000),mm=Math.floor(sec/60),ss=sec%60;
+  return `預估主要動倒數 ${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}（僅依報文時間）`;
+}
+function refreshCountdowns() {
+  document.querySelectorAll('.countdown[data-arrival]').forEach(el=>{
+    if(el.dataset.kind==='11'||el.dataset.kind==='19')return;
+    el.textContent=arrivalText(el.dataset.arrival,el.dataset.kind);
+    el.classList.toggle('past',parseJstDate(el.dataset.arrival)!==null&&parseJstDate(el.dataset.arrival)<=Date.now());
+  });
+}
+function renderWatchResults(areas) {
+  const box=$('watchResults');box.replaceChildren();
+  if(!watchKeywords.length){box.append(emptyNode('尚未設定關注區域。輸入速報區域名稱關鍵字後儲存。'));return;}
+  const matches=areas.filter(a=>{
+    const hay=`${a.pref||''} ${a.name||''}`.toLowerCase();return watchKeywords.some(k=>hay.includes(k.toLowerCase()));
+  });
+  if(!matches.length){const d=document.createElement('div');d.innerHTML='';const strong=document.createElement('strong');strong.textContent='目前速報區域沒有匹配到你的關注關鍵字';const p=document.createElement('div');p.className='item-meta';p.textContent='這不代表所在地安全；區域名稱可能不同，請核對完整預報清單及官方資訊。';box.append(strong,p);return;}
+  const heading=document.createElement('strong');heading.textContent=`匹配到 ${matches.length} 個關注區域`;box.append(heading);
+  matches.forEach(a=>{
+    const row=document.createElement('div');row.className='item highlight';row.style.marginTop='8px';
+    const main=document.createElement('div');main.className='item-main';const title=document.createElement('div');title.className='item-title';title.textContent=`${a.pref} · ${a.name}`;
+    const meta=document.createElement('div');meta.className='item-meta';meta.textContent=`預測震度 ${formatScaleRange(a.scaleFrom,a.scaleTo)}｜${a.arrivalTime?formatTime(a.arrivalTime):'無到達時間資料'}`;
+    main.append(title,meta);row.append(main,makeScaleBadge(a.scaleFrom));box.append(row);
+  });
+}
+function loadWatchSettings() {
+  try { watchKeywords=JSON.parse(localStorage.getItem('eewWatchKeywords')||'[]'); if(!Array.isArray(watchKeywords))watchKeywords=[]; } catch {watchKeywords=[];}
+  $('watchInput').value=watchKeywords.join(', ');
+}
+function saveWatchSettings() {
+  watchKeywords=$('watchInput').value.split(/[,，、]/).map(x=>x.trim()).filter(Boolean).slice(0,20);
+  try { localStorage.setItem('eewWatchKeywords',JSON.stringify(watchKeywords)); } catch(e) { addLog('設定','瀏覽器不允許儲存本機設定，重新整理後可能需要重新輸入。'); }
+  renderWatchResults(currentEEW?.areas||[]);addLog('設定',`已儲存 ${watchKeywords.length} 個關注區域關鍵字`);
+}
+
+// 552：津波預報。警報級別、到達時間與高度均依資料欄位呈現。
+function tsunamiGradeLabel(grade) {
+  return ({MajorWarning:'大津波警報',Warning:'津波警報',Watch:'津波注意報',Unknown:'種類不明'})[grade]||safeText(grade,'不明');
+}
+function handleTsunami(data,isLive=true) {
+  const issue=data.issue||{},areas=Array.isArray(data.areas)?data.areas:[];
+  currentTsunami=data.cancelled?null:data;
+  if(data.cancelled===true||areas.length===0){
+    $('tsunamiBanner').className='tsunami-banner';$('tsunamiBanner').replaceChildren();
+    const h=document.createElement('h3');h.textContent='海嘯預報已解除／目前沒有有效區域';
+    const p=document.createElement('p');p.textContent=`解除報文時間：${safeText(issue.time)}。請仍以官方後續資訊為準。`;
+    $('tsunamiBanner').append(h,p);$('tsunamiAreas').replaceChildren(emptyNode('此份 552 資料沒有有效海嘯區域。'));
+    $('kpiTsunami').textContent='預報解除';$('kpiTsunamiSub').textContent=formatTime(issue.time);
+    if(isLive){addLog('海嘯解除',`552｜${safeText(issue.time)}`);pushTimeline('海嘯預報解除（552）',`發布時間 ${safeText(issue.time)}`,issue.time,'warning');}
+    return;
+  }
+  const hasMajor=areas.some(a=>a.grade==='MajorWarning'),hasWarning=areas.some(a=>a.grade==='Warning');
+  const banner=$('tsunamiBanner');banner.className=`tsunami-banner ${hasMajor?'danger':hasWarning?'warning':'watch'}`;banner.replaceChildren();
+  const h=document.createElement('h3');h.textContent=hasMajor?'大津波警報發布':hasWarning?'津波警報發布':'津波注意報／津波資訊';
+  const p=document.createElement('p');p.textContent=`發布時間：${safeText(issue.time)}｜受影響預報區：${areas.length} 處。沿岸地區請立即遵從地方政府及 JMA 指示。`;
+  banner.append(h,p);
+  const list=$('tsunamiAreas');list.replaceChildren();
+  areas.forEach(a=>{
+    const row=document.createElement('div');row.className='item';
+    const main=document.createElement('div');main.className='item-main';
+    const title=document.createElement('div');title.className='item-title';title.textContent=safeText(a.name,'海岸預報區');
+    const details=[];
+    if(a.firstHeight?.arrivalTime)details.push(`第一波預估 ${formatTime(a.firstHeight.arrivalTime)}`);
+    if(a.firstHeight?.condition)details.push(a.firstHeight.condition);
+    if(a.immediate===true)details.push('預測海嘯可能立即來襲');
+    const hgt=a.maxHeight?.description||((a.maxHeight?.value!=null)?`${a.maxHeight.value} m`:'高度未提供');details.push(`預估高度 ${hgt}`);
+    const meta=document.createElement('div');meta.className='item-meta';meta.textContent=details.join('｜');
+    main.append(title,meta);row.append(main,makeTsunamiBadge(a.grade));list.append(row);
+  });
+  $('kpiTsunami').textContent=hasMajor?'大津波警報':hasWarning?'津波警報':'津波注意報';
+  $('kpiTsunamiSub').textContent=`${areas.length} 個預報區｜${formatTime(issue.time)}`;
+  if(isLive){
+    const topGrade=hasMajor?'大津波警報':hasWarning?'津波警報':'津波注意報';
+    addLog('海嘯預報 552',`${topGrade}｜${areas.length} 個區域`);
+    pushTimeline('海嘯預報（552）',`${topGrade}｜${areas.length} 個區域`,issue.time,'warning');
+    if(hasMajor || hasWarning) playTsunamiAlarm();
+    notifyUser(topGrade,`發布時間 ${safeText(issue.time)}。沿岸地區請立即查看 JMA 與地方政府資訊。`);
+  }
+}
+function makeTsunamiBadge(grade) {
+  const el=document.createElement('span');el.className='scale';
+  el.style.background=grade==='MajorWarning'?'#a52b45':grade==='Warning'?'#c45c30':grade==='Watch'?'#286d8a':'#596a7c';
+  el.textContent=tsunamiGradeLabel(grade);return el;
+}
+
+function handleDetection(data,isLive=true) {
+  if(!isLive)return;
+  const text=safeText(data.type,'EEW 發表檢知');
+  addLog('EEW 檢知 554',`偵測到速報發表：${text}。等待 556 詳細警報報文。`);
+  pushTimeline('EEW 發表檢知（554）',`${text}；等待 556 詳細內容`,data.time,'warning');
+  $('kpiEewSub').textContent='已收到 554 發表檢知，等待 556 詳細報文';
+  notifyUser('偵測到 EEW 發表',`接收類型：${text}。等待詳細警報資料。`);
+}
+function handlePeers(data) {
+  const areas=Array.isArray(data.areas)?data.areas:[];
+  peerTotal=areas.reduce((sum,a)=>sum+(Number(a.peer)||0),0);
+  $('peerCount').textContent=peerTotal?`${peerTotal} 個（${areas.length} 區）`:'0';
+}
+
+function processMessage(data,{live=true}={}) {
+  const code=Number(data.code);
+  if(![551,552,554,555,556].includes(code))return;
+  if(!rememberMessage(data))return;
+  if(live)updateReceiveStats(data);
+  switch(code){
+    case 551: handleQuake(data,live);break;
+    case 552: handleTsunami(data,live);break;
+    case 554: handleDetection(data,live);break;
+    case 555: handlePeers(data);break;
+    case 556: handleEEW(data,live);break;
+  }
+}
+
+// 歷史資料補充。這些資料不會被當成剛剛發布的速報，也不會觸發聲音。
+async function fetchHistoryByCode(code,limit=12) {
+  const url=`${CONFIG.historyUrl}?codes=${code}&limit=${limit}`;
+  const response=await fetch(url,{cache:'no-store'});
+  if(!response.ok)throw new Error(`HTTP ${response.status}`);
+  const data=await response.json();
+  if(!Array.isArray(data))throw new Error(`代碼 ${code} 回傳格式錯誤`);
+  return data;
+}
+async function loadHistory() {
+  const btn=$('refreshBtn');btn.disabled=true;btn.textContent='讀取中…';
+  try {
+    const results=await Promise.allSettled([fetchHistoryByCode(551,12),fetchHistoryByCode(552,8),fetchHistoryByCode(556,8)]);
+    const merged=[];
+    results.forEach((r,i)=>{
+      if(r.status==='fulfilled')merged.push(...r.value);
+      else addLog('歷史資料錯誤',`代碼 ${[551,552,556][i]}：${r.reason?.message||'讀取失敗'}`);
+    });
+    historyItems=merged.sort((a,b)=>(parseJstDate(b.time)||0)-(parseJstDate(a.time)||0));
+    if (results.some(r=>r.status==='fulfilled')) { historyLoadedOnce = true; historyItems.forEach(item => rememberMessage(item)); }
+    const existingTimelineKeys = new Set(timelineEvents.map(evt => `${evt.title}|${evt.time}`));
+    historyItems.slice(0,20).forEach(item => {
+      const code=Number(item.code), issue=item.issue||{}, eq=item.earthquake||{}, hypo=eq.hypocenter||{};
+      let title='', desc='';
+      if(code===551){title='歷史地震資訊（551）';desc=`${safeText(hypo.name,'震央未知')}｜${formatMagnitude(hypo.magnitude)}｜最大觀測震度 ${scaleLabel(eq.maxScale)}`;}
+      else if(code===552){title=item.cancelled?'歷史海嘯預報解除（552）':'歷史海嘯預報（552）';desc=`${(item.areas||[]).length} 個預報區域`;}
+      else if(code===556){title=item.cancelled?'歷史 EEW 取消（556）':'歷史 EEW 報文（556）';desc=`事件 ${safeText(issue.eventId)}｜第 ${safeText(issue.serial)} 報`;}
+      if(title){const key=`${title}|${item.time}`;if(!existingTimelineKeys.has(key))timelineEvents.push({title,description:desc,time:item.time,level:'history'});}
+    });
+    timelineEvents.sort((a,b)=>(parseJstDate(b.time)||0)-(parseJstDate(a.time)||0));
+    timelineEvents=timelineEvents.slice(0,80);renderTimeline();
+    renderHistory(historyItems);
+    const latestQuakeHistory=results[0].status==='fulfilled'?results[0].value[0]:null;
+    if(!latestQuake && latestQuakeHistory)handleQuake(latestQuakeHistory,false);
+    if(results.every(r=>r.status==='rejected'))throw new Error('所有歷史資料端點均無法讀取');
+    addLog('系統',`歷史資料更新完成，共 ${historyItems.length} 筆`);
+  } catch(e) {
+    $('historyList').replaceChildren(emptyNode(`歷史資料讀取失敗：${e.message}`));
+    addLog('歷史資料',e.message||'讀取失敗');
+  } finally {btn.disabled=false;btn.textContent='↻ 更新歷史';}
+}
+function renderHistory(items) {
+  const box=$('historyList');box.replaceChildren();
+  if(!items.length){box.append(emptyNode('目前沒有可顯示的歷史資料。'));return;}
+  items.slice(0,18).forEach(item=>{
+    const code=Number(item.code), issue=item.issue||{}, eq=item.earthquake||{}, hypo=eq.hypocenter||{};
+    const btn=document.createElement('button');btn.type='button';btn.className='item';btn.style.width='100%';btn.style.textAlign='left';btn.style.color='inherit';
+    const main=document.createElement('div');main.className='item-main';
+    const title=document.createElement('div');title.className='item-title';
+    const meta=document.createElement('div');meta.className='item-meta';
+    let badge;
+    if(code===551){title.textContent=hypo.name||'一般地震資訊';meta.textContent=`551｜${safeText(eq.time||issue.time)}｜${formatMagnitude(hypo.magnitude)}｜震度 ${scaleLabel(eq.maxScale)}`;badge=makeScaleBadge(eq.maxScale);}
+    else if(code===552){const first=(item.areas||[])[0];title.textContent=item.cancelled?'海嘯預報解除':'海嘯預報';meta.textContent=`552｜${safeText(issue.time)}｜${first?tsunamiGradeLabel(first.grade):'無區域資料'}`;badge=makeTsunamiBadge(first?.grade);}
+    else if(code===556){title.textContent=item.cancelled?'緊急地震速報取消':'緊急地震速報';meta.textContent=`556｜${safeText(issue.time)}｜事件 ${safeText(issue.eventId)}｜第 ${safeText(issue.serial)} 報`;badge=document.createElement('span');badge.className='scale';badge.style.background='#a83e4c';badge.textContent=item.cancelled?'取消':'EEW';}
+    else{return;}
+    main.append(title,meta);btn.append(main,badge);
+    btn.addEventListener('click',()=>{
+      if(code===551)handleQuake(item,false);
+      else if(code===552)handleTsunami(item,false);
+      else if(code===556){
+        if(item.cancelled)renderMainAlert({title:'歷史 EEW 取消報文',pill:'歷史資料 · 556',type:'cancelled',rows:[['事件編號',issue.eventId],['報數',issue.serial],['發布時間',issue.time]]});
+        else handleEEW(item,false);
+      }
+      addLog('歷史紀錄',`檢視代碼 ${code}｜${safeText(issue.time||item.time)}`);
+    });
+    box.append(btn);
+  });
+}
+
+// WebSocket：同 IP 請勿同時開啟過多分頁；P2Pquake 可能定時切斷連線。
+function connect() {
+  if(socket&&(socket.readyState===WebSocket.OPEN||socket.readyState===WebSocket.CONNECTING))return;
+  if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
+  if(!navigator.onLine){setConnection('disconnected','目前離線，等待網路恢復');return;}
+  setConnection('','正在連線至 P2Pquake…');
+  let ws;
+  try {ws=new WebSocket(CONFIG.wsUrl);socket=ws;} catch(e){addLog('WebSocket',e.message||'無法建立連線');scheduleReconnect();return;}
+  ws.addEventListener('open',()=>{
+    if(socket!==ws)return;reconnectCount=0;setConnection('connected','已連線至 P2Pquake');addLog('系統','WebSocket 已連線，開始監聽即時推播');
+    if (!historyLoadedOnce) loadHistory();
+  });
+  ws.addEventListener('message',event=>{
+    if(socket!==ws)return;
+    try {const data=JSON.parse(event.data);processMessage(data,{live:true});}
+    catch(e){addLog('資料解析錯誤',e.message||'無法解析 WebSocket 訊息');}
+  });
+  ws.addEventListener('error',()=>{if(socket===ws){setConnection('disconnected','WebSocket 發生錯誤');addLog('WebSocket','連線錯誤');}});
+  ws.addEventListener('close',()=>{
+    if(socket!==ws)return;socket=null;setConnection('disconnected','連線中斷，準備重新連線');addLog('系統','WebSocket 已關閉');scheduleReconnect();
+  });
+}
+function scheduleReconnect() {
+  if(reconnectTimer||!navigator.onLine)return;
+  reconnectCount++;
+  const base=Math.min(CONFIG.reconnectMaxMs,CONFIG.reconnectBaseMs*(2**Math.min(reconnectCount-1,4)));
+  const delay=Math.round(base*(.8+Math.random()*.4));
+  setConnection('disconnected',`${Math.ceil(delay/1000)} 秒後重新連線`);
+  reconnectTimer=setTimeout(()=>{reconnectTimer=null;connect();},delay);
+}
+
+function testAlert() {
+  const now=new Date().toLocaleString('zh-TW',{hour12:false});
+  renderMainAlert({title:'🚨 緊急地震速報（本機測試）',pill:'測試畫面，不是真實警報',type:'test',rows:[
+    ['地震發生時間',now],['震央位置','東京灣（模擬）'],['規模／深度','M7.2／10 km'],['事件編號','LOCAL-TEST'],['速報編號','TEST'],['提醒','此資料為本機模擬，不代表實際地震']
+  ]});
+  renderEEWAreas([
+    {pref:'東京都',name:'東京地方',scaleFrom:60,scaleTo:60,kindCode:'10',arrivalTime:null},
+    {pref:'神奈川県',name:'東部',scaleFrom:55,scaleTo:55,kindCode:'19',arrivalTime:null},
+    {pref:'千葉県',name:'北西部',scaleFrom:50,scaleTo:50,kindCode:'11',arrivalTime:null}
+  ]);
+  updateEpicenter(35.62,139.88,'東京灣（模擬）','M7.2','測試震央');
+  renderWatchResults([
+    {pref:'東京都',name:'東京地方',scaleFrom:60,scaleTo:60,kindCode:'10'},
+    {pref:'神奈川県',name:'東部',scaleFrom:55,scaleTo:55,kindCode:'19'},
+    {pref:'千葉県',name:'北西部',scaleFrom:50,scaleTo:50,kindCode:'11'}
+  ]);
+  addLog('測試','畫面測試已執行；不會寫入或修改真實 API 資料');
+  if(soundEnabled&&audioContext)playEewAlarm(false);else addLog('測試','尚未啟用音效，僅顯示測試畫面');
+}
+
+function updateClock() {$('clock').textContent=new Date().toLocaleTimeString('zh-TW',{hour12:false});}
+function updateFeedFreshness() {
+  if(!lastReceiveTime)return;
+  const age=Date.now()-lastReceiveTime;
+  if(age>CONFIG.staleAfterMs&&socket?.readyState===WebSocket.OPEN){
+    $('kpiFeed').textContent='暫無新推播';$('kpiFeedSub').textContent=`已 ${Math.floor(age/1000)} 秒未收到訊息（不代表無地震）`;
+  }
+}
+
+$('soundBtn').addEventListener('click',toggleSound);
+$('notifyBtn').addEventListener('click',toggleNotifications);
+$('testBtn').addEventListener('click',testAlert);
+$('refreshBtn').addEventListener('click',loadHistory);
+$('saveWatchBtn').addEventListener('click',saveWatchSettings);
+$('waveBtn').addEventListener('click',startWaveDemo);
+$('stopWaveBtn').addEventListener('click',stopWaveDemo);
+$('resetMapBtn').addEventListener('click',resetMap);
+window.addEventListener('online',()=>{addLog('網路','偵測到網路恢復');connect();});
+window.addEventListener('offline',()=>{setConnection('disconnected','目前離線');addLog('網路','瀏覽器偵測到網路中斷');});
+window.addEventListener('beforeunload',()=>{stopWaveDemo();if(reconnectTimer)clearTimeout(reconnectTimer);if(socket)socket.close();});
+
+loadWatchSettings();
+updateClock();setInterval(updateClock,1000);setInterval(refreshCountdowns,1000);setInterval(updateFeedFreshness,5000);
+addLog('系統','Japan Earthquake Monitor 初始化完成');
+addLog('資料來源','即時推播：P2Pquake WebSocket API v2；歷史資料：P2Pquake History API v2');
+connect();
+</script>
+</body>
+</html>

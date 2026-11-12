@@ -101,17 +101,17 @@
     </div>
   </section>
 
-  <div class="notice"><strong>防災安全聲明：</strong>本網站為個人資訊整合與展示工具，使用 P2P地震情報轉發資料，並非日本氣象廳官方警報設備。資料可能延遲、遺失或中斷，不能取代日本氣象廳、地方政府、手機官方緊急速報及現場廣播。請勿因本網站未顯示警報而認定安全。</div>
+  <div class="notice"><strong>防災安全聲明：</strong>本網站為個人資訊整合與展示工具，使用 P2P地震情報轉發資料；EEW 即時顯示接收 WebSocket 的 code 556，開啟頁面時的歷史補查只作參考、不會當成新警報。這並非日本氣象廳官方警報設備。資料可能延遲、遺失或中斷，不能取代日本氣象廳、地方政府、手機官方緊急速報及現場廣播。請勿因本網站未顯示警報而認定安全。</div>
 
   <section class="kpis">
-    <div class="kpi"><div class="kpi-label">緊急地震速報 EEW</div><div class="kpi-value" id="kpiEew">監聽中</div><div class="kpi-sub" id="kpiEewSub">等待 556 推播</div></div>
+    <div class="kpi"><div class="kpi-label">P2P 即時緊急地震速報 EEW（556）</div><div class="kpi-value" id="kpiEew">監聽中</div><div class="kpi-sub" id="kpiEewSub">WebSocket 即時等待 556 警報報文</div></div>
     <div class="kpi"><div class="kpi-label">海嘯預報</div><div class="kpi-value" id="kpiTsunami">尚無有效資訊</div><div class="kpi-sub" id="kpiTsunamiSub">等待 552 推播</div></div>
     <div class="kpi"><div class="kpi-label">最近地震資訊</div><div class="kpi-value" id="kpiQuake">尚無資料</div><div class="kpi-sub" id="kpiQuakeSub">等待 551 推播</div></div>
     <div class="kpi"><div class="kpi-label">資料接收狀態</div><div class="kpi-value" id="kpiFeed">尚未接收</div><div class="kpi-sub" id="kpiFeedSub">WebSocket 狀態與資料時間分開判斷</div></div>
   </section>
 
   <section id="mainAlert" class="eew-card">
-    <div class="card-top"><h2 class="card-title" id="mainAlertTitle">等待地震速報資料</h2><span class="pill" id="mainAlertPill">監聽中</span></div>
+    <div class="card-top"><h2 class="card-title" id="mainAlertTitle">等待 P2Pquake 緊急地震速報（556）</h2><span class="pill" id="mainAlertPill">即時監聽中</span></div>
     <div class="data-grid" id="mainAlertData">
       <div class="data-cell"><span class="data-label">資料狀態</span><span class="data-value">等待 P2Pquake 推播</span></div>
       <div class="data-cell"><span class="data-label">速報種類</span><span class="data-value">EEW 556</span></div>
@@ -216,6 +216,7 @@ let soundEnabled = false, notificationEnabled = false, lastReceiveTime = null, h
 let currentEEW = null, currentTsunami = null, latestQuake = null;
 let latestObservedPoints = [], timelineEvents = [], historyItems = [];
 let peerTotal = null, seenMessageIds = new Set(), alarmedReports = new Set();
+let hasReceivedLiveEEW = false, hasReceivedLiveEEWSignal = false, lastLiveEewAt = null, lastLiveEewReportKey = null;
 let watchKeywords = [];
 let waveTimer = null, waveStartedAt = null, waveP = null, waveS = null;
 
@@ -474,40 +475,92 @@ function renderObservedChart(points) {
   });
 }
 
-// 556：緊急地震速報（警報）。使用 id 去重，另用 eventId+serial 區分速報更新。
-function handleEEW(data,isLive=true) {
-  const issue=data.issue||{}, eventId=safeText(issue.eventId,'事件編號未知'), serial=safeText(issue.serial,'報數未知');
+// 556：P2Pquake 即時轉發的日本氣象廳緊急地震速報（警報）。
+// live=true 才代表剛由 WebSocket 收到；歷史補查不會播放警報或冒充即時通知。
+function handleEEW(data,isLive=true,isHistory=false) {
+  const issue=data.issue||{};
+  const eventId=safeText(issue.eventId,'事件編號未知');
+  const serial=safeText(issue.serial,'報數未知');
   const reportKey=`${eventId}:${serial}`;
+  const activeEventId=currentEEW?.issue?.eventId ? String(currentEEW.issue.eventId) : null;
+
   if(data.cancelled===true) {
-    const cancelledFor=currentEEW?.issue?.eventId===issue.eventId || !currentEEW;
-    if(isLive && cancelledFor) currentEEW=null;
-    renderMainAlert({title:'緊急地震速報已取消',pill:'取消報文 · 556',type:'cancelled',rows:[
-      ['事件編號',eventId],['速報編號',serial],['取消發布時間',issue.time],['處理狀態','已收到取消報文；請繼續留意官方資訊']
-    ]});
-    $('kpiEew').textContent='速報已取消';$('kpiEewSub').textContent=`${eventId}｜報數 ${serial}`;
-    $('eewAreas').replaceChildren(emptyNode('此速報已取消。取消報文不代表其他地震或海嘯風險已解除。'));
-    renderWatchResults([]);
-    if(isLive){addLog('EEW 取消',`${eventId}｜報數 ${serial}`);pushTimeline('緊急地震速報取消（556）',`${eventId}｜報數 ${serial}`,issue.time,'warning');}
+    const cancelEventId=String(issue.eventId||'');
+    const matchesActive=!activeEventId || activeEventId===cancelEventId;
+    if(isLive) {
+      hasReceivedLiveEEW=true;
+      lastLiveEewAt=Date.now();
+      lastLiveEewReportKey=reportKey;
+      if(activeEventId===cancelEventId) currentEEW=null;
+    }
+
+    // 舊事件的取消報文不能覆蓋另一個仍在顯示的新事件速報。
+    const shouldRender=matchesActive || isHistory && !currentEEW;
+    if(shouldRender) {
+      renderMainAlert({title:isLive?'緊急地震速報已取消':'最近一筆 EEW 取消紀錄',pill:isLive?'即時收到取消報文 · 556':'歷史補查 · 非即時警報',type:'cancelled',rows:[
+        ['事件編號',eventId],['速報編號',serial],['發布時間',issue.time],
+        ['P2P 接收時間',data.time],['處理狀態','已收到此事件的取消報文；其他事件及海嘯風險仍須另外確認']
+      ]});
+      $('eewAreas').replaceChildren(emptyNode('此速報已取消。取消報文不代表其他地震或海嘯風險已解除。'));
+      renderWatchResults([]);
+    }
+    if(isLive) {
+      $('kpiEew').textContent='收到速報取消';
+      $('kpiEewSub').textContent=`事件 ${eventId}｜第 ${serial} 報｜${formatTime(data.time||issue.time)}`;
+      addLog('EEW 取消 556',`${eventId}｜報數 ${serial}${matchesActive?'':'（非目前顯示事件，保留現有速報畫面）'}`);
+      pushTimeline('緊急地震速報取消（556）',`事件 ${eventId}｜報數 ${serial}`,issue.time,'warning');
+    }
     return;
   }
-  const eq=data.earthquake||{}, hypo=eq.hypocenter||{}, areas=Array.isArray(data.areas)?data.areas:[];
-  const place=safeText(hypo.name,'震央預估中'), isTest=data.test===true;
-  if(isLive) currentEEW=data;
+
+  const eq=data.earthquake||{};
+  const hypo=eq.hypocenter||{};
+  const areas=Array.isArray(data.areas)?data.areas:[];
+  const place=safeText(hypo.name,'震央預估中');
+  const isTest=data.test===true;
+  if(isLive) {
+    hasReceivedLiveEEW=true;
+    lastLiveEewAt=Date.now();
+    lastLiveEewReportKey=reportKey;
+    if(!isTest) currentEEW=data;
+  }
+
   updateEpicenter(hypo.latitude,hypo.longitude,place,formatMagnitude(hypo.magnitude),'EEW 震央');
-  renderMainAlert({title:isTest?'緊急地震速報（測試資料）':'🚨 緊急地震速報（警報）',pill:isTest?'測試資料 · 556':'警報發布中 · 556',type:isTest?'test':'warning',rows:[
-    ['地震發生時間',eq.originTime],['震央位置',place],['規模／深度',`${formatMagnitude(hypo.magnitude)}／${formatDepth(hypo.depth)}`],
-    ['事件編號',eventId],['速報編號',serial],['發布時間',issue.time],['資料狀態',isTest?'測試資料，不代表實際地震':(eq.condition||'速報轉發資料')],['區域筆數',areas.length]
-  ]});
-  $('kpiEew').textContent=isTest?'測試速報':'速報發布中';$('kpiEewSub').textContent=`${eventId}｜第 ${serial} 報`;
-  renderEEWAreas(areas);renderWatchResults(areas);
-  if(isLive){
-    addLog(isTest?'EEW 測試':'EEW 發布',`${place}｜事件 ${eventId}｜報數 ${serial}`);
-    pushTimeline(isTest?'EEW 測試資料（556）':'緊急地震速報（556）',`${place}｜第 ${serial} 報｜預報區域 ${areas.length} 處`,issue.time,'warning');
-    if(!isTest && !alarmedReports.has(reportKey)){
+  const statePill=isTest?'測試報文 · 556':isLive?'即時收到 · P2Pquake WebSocket 556':
+    isHistory?'歷史補查 · 非即時警報':'歷史資料 · 非即時警報';
+  renderMainAlert({
+    title:isTest?'緊急地震速報（測試報文）':isLive?'🚨 緊急地震速報（即時接收）':'最近一筆緊急地震速報（歷史資料）',
+    pill:statePill,
+    type:isTest?'test':isLive?'warning':'test',
+    rows:[
+      ['地震發生時間',eq.originTime],
+      ['震央位置',place],
+      ['規模／深度',`${formatMagnitude(hypo.magnitude)}／${formatDepth(hypo.depth)}`],
+      ['事件編號',eventId],
+      ['速報編號',serial],
+      ['氣象廳發布時間',issue.time],
+      ['P2P 接收時間',data.time],
+      ['資料狀態',isTest?'測試資料，不代表實際地震':(eq.condition||'P2Pquake 556 速報轉發資料')],
+      ['預報區域數',areas.length]
+    ]
+  });
+  $('kpiEew').textContent=isTest?'收到測試報文':isLive?'即時收到 EEW':'最近一筆 EEW';
+  $('kpiEewSub').textContent=`事件 ${eventId}｜第 ${serial} 報｜${formatTime(data.time||issue.time)}`;
+  renderEEWAreas(areas);
+  renderWatchResults(areas);
+
+  if(isLive) {
+    addLog(isTest?'EEW 測試報文':'EEW 即時接收 556',`${place}｜事件 ${eventId}｜第 ${serial} 報｜${areas.length} 個預報區域`);
+    pushTimeline(isTest?'EEW 測試報文（556）':'緊急地震速報即時接收（556）',`${place}｜第 ${serial} 報｜預報區域 ${areas.length} 處`,issue.time,'warning');
+    if(!isTest && !alarmedReports.has(reportKey)) {
       const isUpdate=[...alarmedReports].some(x=>x.startsWith(`${eventId}:`));
-      alarmedReports.add(reportKey);playEewAlarm(isUpdate);
-      notifyUser('日本緊急地震速報',`${place}｜第 ${serial} 報。請立即確認官方資訊並採取安全行動。`);
+      alarmedReports.add(reportKey);
+      if(alarmedReports.size>500) alarmedReports=new Set([...alarmedReports].slice(-250));
+      playEewAlarm(isUpdate);
+      notifyUser('日本緊急地震速報（P2Pquake 556）',`${place}｜第 ${serial} 報。請立即確認日本氣象廳及地方政府資訊，並依現場狀況採取安全行動。`);
     }
+  } else if(isHistory) {
+    addLog('EEW 歷史補查',`顯示最近一筆 556：${place}｜事件 ${eventId}｜第 ${serial} 報；未播放警報。`);
   }
 }
 function formatKindCode(code) {
@@ -623,11 +676,18 @@ function makeTsunamiBadge(grade) {
 
 function handleDetection(data,isLive=true) {
   if(!isLive)return;
+  hasReceivedLiveEEWSignal=true;
   const text=safeText(data.type,'EEW 發表檢知');
   addLog('EEW 檢知 554',`偵測到速報發表：${text}。等待 556 詳細警報報文。`);
   pushTimeline('EEW 發表檢知（554）',`${text}；等待 556 詳細內容`,data.time,'warning');
-  $('kpiEewSub').textContent='已收到 554 發表檢知，等待 556 詳細報文';
-  notifyUser('偵測到 EEW 發表',`接收類型：${text}。等待詳細警報資料。`);
+  if(!currentEEW) {
+    $('kpiEew').textContent='已偵測速報發表';
+    $('kpiEewSub').textContent='已收到 554 發表檢知，正在等待 556 詳細警報報文';
+    renderMainAlert({title:'偵測到緊急地震速報發表',pill:'554 發表檢知 · 等待 556 詳情',type:'warning',rows:[
+      ['訊息來源','P2Pquake WebSocket 即時推播'],['檢知種類',text],['P2P 接收時間',data.time],['目前狀態','已偵測到速報發表，但詳細震央及預報區域尚待 556 報文'],['注意','請同時留意日本氣象廳及官方緊急速報']
+    ]});
+  }
+  notifyUser('偵測到 EEW 發表（554）',`接收類型：${text}。系統正在等待 556 詳細警報資料。`);
 }
 function handlePeers(data) {
   const areas=Array.isArray(data.areas)?data.areas:[];
@@ -668,7 +728,7 @@ async function loadHistory() {
       else addLog('歷史資料錯誤',`代碼 ${[551,552,556][i]}：${r.reason?.message||'讀取失敗'}`);
     });
     historyItems=merged.sort((a,b)=>(parseJstDate(b.time)||0)-(parseJstDate(a.time)||0));
-    if (results.some(r=>r.status==='fulfilled')) { historyLoadedOnce = true; historyItems.forEach(item => rememberMessage(item)); }
+    if (results.some(r=>r.status==='fulfilled')) { historyLoadedOnce = true; }
     const existingTimelineKeys = new Set(timelineEvents.map(evt => `${evt.title}|${evt.time}`));
     historyItems.slice(0,20).forEach(item => {
       const code=Number(item.code), issue=item.issue||{}, eq=item.earthquake||{}, hypo=eq.hypocenter||{};
@@ -681,6 +741,11 @@ async function loadHistory() {
     timelineEvents.sort((a,b)=>(parseJstDate(b.time)||0)-(parseJstDate(a.time)||0));
     timelineEvents=timelineEvents.slice(0,80);renderTimeline();
     renderHistory(historyItems);
+    const latestEewHistory=results[2].status==='fulfilled'?results[2].value[0]:null;
+    if(latestEewHistory && !hasReceivedLiveEEWSignal && !hasReceivedLiveEEW && !currentEEW) {
+      // 開啟頁面前已發布的速報不會由 WebSocket 重播；以歷史補查作參考，明確標為非即時。
+      handleEEW(latestEewHistory,false,true);
+    }
     const latestQuakeHistory=results[0].status==='fulfilled'?results[0].value[0]:null;
     if(!latestQuake && latestQuakeHistory)handleQuake(latestQuakeHistory,false);
     if(results.every(r=>r.status==='rejected'))throw new Error('所有歷史資料端點均無法讀取');
@@ -710,7 +775,7 @@ function renderHistory(items) {
       else if(code===552)handleTsunami(item,false);
       else if(code===556){
         if(item.cancelled)renderMainAlert({title:'歷史 EEW 取消報文',pill:'歷史資料 · 556',type:'cancelled',rows:[['事件編號',issue.eventId],['報數',issue.serial],['發布時間',issue.time]]});
-        else handleEEW(item,false);
+        else handleEEW(item,false,true);
       }
       addLog('歷史紀錄',`檢視代碼 ${code}｜${safeText(issue.time||item.time)}`);
     });
@@ -771,10 +836,14 @@ function testAlert() {
 
 function updateClock() {$('clock').textContent=new Date().toLocaleTimeString('zh-TW',{hour12:false});}
 function updateFeedFreshness() {
-  if(!lastReceiveTime)return;
-  const age=Date.now()-lastReceiveTime;
-  if(age>CONFIG.staleAfterMs&&socket?.readyState===WebSocket.OPEN){
-    $('kpiFeed').textContent='暫無新推播';$('kpiFeedSub').textContent=`已 ${Math.floor(age/1000)} 秒未收到訊息（不代表無地震）`;
+  if(lastReceiveTime) {
+    const age=Date.now()-lastReceiveTime;
+    if(age>CONFIG.staleAfterMs&&socket?.readyState===WebSocket.OPEN){
+      $('kpiFeed').textContent='暫無新推播';$('kpiFeedSub').textContent=`已 ${Math.floor(age/1000)} 秒未收到訊息（不代表無地震）`;
+    }
+  }
+  if(lastLiveEewAt && Date.now()-lastLiveEewAt>5*60*1000) {
+    $('kpiEewSub').textContent=`最近一次即時 556：${new Date(lastLiveEewAt).toLocaleTimeString('zh-TW',{hour12:false})}；未收到新報文不代表速報已解除`;
   }
 }
 
@@ -793,7 +862,7 @@ window.addEventListener('beforeunload',()=>{stopWaveDemo();if(reconnectTimer)cle
 loadWatchSettings();
 updateClock();setInterval(updateClock,1000);setInterval(refreshCountdowns,1000);setInterval(updateFeedFreshness,5000);
 addLog('系統','Japan Earthquake Monitor 初始化完成');
-addLog('資料來源','即時推播：P2Pquake WebSocket API v2；歷史資料：P2Pquake History API v2');
+addLog('資料來源','EEW 即時速報：P2Pquake WebSocket API v2（code 556）；歷史補查：P2Pquake History API v2（不觸發警報）');
 connect();
 </script>
 </body>
