@@ -1,475 +1,757 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>日本緊急地震速報 (EEW) 即時監控</title>
-    <!-- 引入 Leaflet 地圖庫 CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #121212; 
-            color: #ffffff; 
-            margin: 0; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-        }
-        .container { 
-            max-width: 700px; 
-            width: 100%; 
-            background-color: #1e1e1e; 
-            border-radius: 10px; 
-            padding: 20px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
-        }
-        h1 { 
-            font-size: 22px; 
-            text-align: center; 
-            border-bottom: 1px solid #333; 
-            padding-bottom: 15px; 
-            margin-top: 0;
-        }
-        .control-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            background: #252525;
-            padding: 10px 15px;
-            border-radius: 8px;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .btn {
-            padding: 8px 14px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 13px;
-            transition: background 0.2s;
-        }
-        .btn-sound { background-color: #f44336; color: white; }
-        .btn-sound.enabled { background-color: #4caf50; }
-        .btn-test { background-color: #3f51b5; color: white; margin-left: 8px; }
-        .btn-test:hover { background-color: #5c6bc0; }
-        .status { font-size: 13px; }
-        .status .indicator { 
-            display: inline-block; 
-            width: 10px; 
-            height: 10px; 
-            border-radius: 50%; 
-            background-color: #f44336; 
-            margin-right: 6px; 
-        }
-        .status.connected .indicator { background-color: #4caf50; }
-        
-        /* 情報卡片樣式 */
-        .eew-card { 
-            background-color: #2d2d2d; 
-            border-left: 6px solid #4caf50; 
-            padding: 20px; 
-            border-radius: 6px; 
-            margin-bottom: 20px; 
-            transition: all 0.3s ease;
-        }
-        .eew-card.warning { 
-            border-left-color: #ff5252; 
-            background-color: #3a1c1c; 
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0.5); }
-            70% { box-shadow: 0 0 0 12px rgba(255, 82, 82, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(255, 82, 82, 0); }
-        }
-        .data-row { 
-            display: flex; 
-            justify-content: space-between; 
-            margin: 10px 0; 
-            border-bottom: 1px solid #444; 
-            padding-bottom: 6px; 
-        }
-        .data-label { color: #aaaaaa; }
-        .data-value { font-weight: bold; font-size: 1.05em; color: #fff; }
-
-        /* 地圖區塊樣式 */
-        #map {
-            height: 300px;
-            width: 100%;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #333;
-            z-index: 1;
-            background-color: #1a1a1a;
-        }
-        /* 將免費 OpenStreetMap 圖磚轉為暗黑風格（不影響紅色震央標記） */
-        .leaflet-tile-pane {
-            filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-        }
-
-        /* 各縣市震度列表樣式 */
-        .points-container {
-            background-color: #252525;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            max-height: 220px;
-            overflow-y: auto;
-            display: none;
-        }
-        .points-title {
-            font-size: 15px;
-            font-weight: bold;
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #ddd;
-            border-bottom: 1px solid #383838;
-            padding-bottom: 6px;
-        }
-        .scale-group {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        .scale-badge {
-            min-width: 48px;
-            text-align: center;
-            padding: 3px 6px;
-            border-radius: 4px;
-            font-weight: bold;
-            margin-right: 12px;
-            font-size: 13px;
-        }
-        /* 日本氣象廳震度代表色 */
-        .scale-70 { background-color: #9c27b0; color: #fff; }
-        .scale-60, .scale-55 { background-color: #d32f2f; color: #fff; }
-        .scale-50, .scale-45 { background-color: #f57c00; color: #fff; }
-        .scale-40 { background-color: #fbc02d; color: #000; }
-        .scale-30 { background-color: #388e3c; color: #fff; }
-        .scale-20 { background-color: #1976d2; color: #fff; }
-        .scale-10 { background-color: #616161; color: #fff; }
-        .pref-list { color: #ccc; line-height: 1.5; }
-
-        /* 通訊日誌 */
-        #log { 
-            margin-top: 10px; 
-            font-size: 0.85em; 
-            color: #888; 
-            height: 120px; 
-            overflow-y: auto; 
-            background: #0a0a0a; 
-            padding: 12px; 
-            border-radius: 6px; 
-            border: 1px solid #333;
-        }
-        .log-entry { margin-bottom: 5px; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101722">
+  <title>日本地震速報監控｜EEW Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b111b;
+      --panel: #141e2b;
+      --panel-2: #1a2736;
+      --border: #29394d;
+      --text: #edf3fa;
+      --muted: #9aabbd;
+      --green: #36c98b;
+      --red: #ff4d5e;
+      --orange: #ffad42;
+      --blue: #5ca9ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background: radial-gradient(circle at top left, #17283b 0, var(--bg) 42rem);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+    }
+    button { font: inherit; }
+    .container { width: min(1440px, 100%); margin: 0 auto; }
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; margin-bottom: 18px;
+    }
+    .brand h1 { margin: 0; font-size: clamp(22px, 3vw, 30px); letter-spacing: .02em; }
+    .brand p { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+    .source-tag {
+      border: 1px solid #35506c; background: #14283c; color: #a9d4ff;
+      border-radius: 999px; padding: 7px 11px; font-size: 12px; white-space: nowrap;
+    }
+    .toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 13px 15px; margin-bottom: 16px;
+      background: rgba(20, 30, 43, .92); border: 1px solid var(--border); border-radius: 14px;
+    }
+    .status-wrap { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+    .status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 10px currentColor; }
+    .status.connected .dot { background: var(--green); color: var(--green); }
+    .status.disconnected .dot { background: var(--red); color: var(--red); }
+    .status small { color: #71869c; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .btn {
+      border: 1px solid #3b4e63; background: #223246; color: var(--text);
+      border-radius: 9px; padding: 9px 13px; cursor: pointer; font-weight: 650; font-size: 13px;
+      transition: .18s ease;
+    }
+    .btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+    .btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .btn-sound { background: #4b2730; border-color: #85414e; }
+    .btn-sound.enabled { background: #174b3b; border-color: #287d60; }
+    .btn-test { background: #263c68; border-color: #4568a6; }
+    .btn-secondary { background: #202d3c; }
+    .notice {
+      border: 1px solid #70572d; background: #302719; color: #f5d69b;
+      padding: 11px 14px; border-radius: 11px; margin-bottom: 16px;
+      font-size: 12px; line-height: 1.65;
+    }
+    .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(320px, .85fr); gap: 16px; align-items: start; }
+    .panel {
+      background: rgba(20, 30, 43, .96); border: 1px solid var(--border); border-radius: 14px;
+      padding: 17px; min-width: 0; box-shadow: 0 12px 30px rgba(0,0,0,.16);
+    }
+    .panel + .panel { margin-top: 16px; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 13px; }
+    .panel-heading h2 { margin: 0; font-size: 15px; }
+    .panel-heading .sub { color: var(--muted); font-size: 11px; }
+    .eew-card {
+      border: 1px solid #2b5c4c; border-left: 5px solid var(--green);
+      background: linear-gradient(120deg, #15372f, #172c30); border-radius: 12px;
+      padding: 19px; margin-bottom: 16px; min-height: 190px;
+    }
+    .eew-card.warning { border-color: #85414e; border-left-color: var(--red); background: linear-gradient(120deg, #43222b, #2a202b); }
+    .eew-card.cancelled { border-color: #6e5a31; border-left-color: var(--orange); background: linear-gradient(120deg, #3a3020, #272a2d); }
+    .eew-card.test { border-color: #4568a6; border-left-color: var(--blue); background: linear-gradient(120deg, #1d3150, #1b2939); }
+    .card-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 15px; }
+    .card-title { margin: 0; font-size: 19px; font-weight: 800; }
+    .state-pill { border: 1px solid currentColor; border-radius: 999px; padding: 4px 9px; font-size: 11px; white-space: nowrap; }
+    .data-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .data-cell { border-top: 1px solid rgba(255,255,255,.12); padding-top: 9px; min-width: 0; }
+    .data-label { display: block; color: #a9b9c9; font-size: 11px; margin-bottom: 5px; }
+    .data-value { display: block; color: #fff; font-size: 15px; font-weight: 700; overflow-wrap: anywhere; }
+    #map { height: 520px; width: 100%; border: 1px solid var(--border); border-radius: 11px; background: #111a25; }
+    .map-legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--muted); font-size: 11px; margin-top: 9px; }
+    .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #ff304f; margin-right: 5px; }
+    .empty { color: var(--muted); font-size: 13px; padding: 12px 2px; }
+    .area-list, .points-list { display: flex; flex-direction: column; gap: 7px; max-height: 360px; overflow: auto; padding-right: 3px; }
+    .area-item, .point-item, .history-item {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 10px 11px; background: var(--panel-2); border: 1px solid #2b3c50; border-radius: 9px;
+    }
+    .area-name, .point-name { min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+    .area-meta { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; }
+    .scale-badge { min-width: 62px; text-align: center; border-radius: 7px; padding: 5px 7px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+    .scale-70 { background: #8b35b8; color: #fff; }
+    .scale-60, .scale-55 { background: #c93643; color: #fff; }
+    .scale-50, .scale-45 { background: #df791f; color: #fff; }
+    .scale-40 { background: #e5c344; color: #171717; }
+    .scale-30 { background: #348c58; color: #fff; }
+    .scale-20 { background: #286fb9; color: #fff; }
+    .scale-10 { background: #596a7c; color: #fff; }
+    .history-list { display: flex; flex-direction: column; gap: 7px; max-height: 460px; overflow: auto; }
+    .history-item { width: 100%; text-align: left; color: var(--text); cursor: pointer; }
+    .history-item:hover { border-color: #648bb5; background: #21334a; }
+    .history-main { min-width: 0; }
+    .history-main strong { display: block; font-size: 13px; }
+    .history-main small { color: var(--muted); display: block; margin-top: 4px; font-size: 11px; }
+    .log {
+      background: #0b121c; border: 1px solid #26364a; border-radius: 9px;
+      height: 220px; overflow: auto; padding: 10px 12px; font: 12px/1.6 Consolas, monospace;
+    }
+    .log-entry { border-bottom: 1px solid #1b2a3a; padding: 4px 0; overflow-wrap: anywhere; }
+    .log-time { color: #6daee8; }
+    .log-type { color: #e7bd64; }
+    .footer-note { color: #74869a; font-size: 11px; line-height: 1.6; margin-top: 16px; }
+    @media (max-width: 980px) {
+      body { padding: 15px; }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      #map { height: 420px; }
+    }
+    @media (max-width: 560px) {
+      body { padding: 10px; }
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .toolbar { align-items: flex-start; }
+      .actions { width: 100%; }
+      .actions .btn { flex: 1; }
+      .panel { padding: 13px; }
+      #map { height: 340px; }
+      .data-grid { gap: 10px; }
+      .card-title { font-size: 16px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+    }
+  </style>
 </head>
 <body>
+  <main class="container">
+    <header class="topbar">
+      <div class="brand">
+        <h1>日本地震速報監控</h1>
+        <p>Earthquake Early Warning · Live Monitoring Dashboard</p>
+      </div>
+      <div class="source-tag">資料轉發來源：P2P地震情報</div>
+    </header>
 
-<div class="container">
-    <h1>🚨 日本即時地震與 EEW 監控</h1>
-    
-    <div class="control-bar">
-        <div id="connectionStatus" class="status">
-            <span class="indicator"></span>連線中...
-        </div>
-        <div>
-            <button id="soundToggleBtn" class="btn btn-sound" onclick="enableAudio()">🔇 啟用警報音效</button>
-            <button class="btn btn-test" onclick="testAlarm()">🔔 模擬警報</button>
-        </div>
+    <section class="toolbar" aria-label="連線與警報控制">
+      <div class="status-wrap">
+        <div id="connectionStatus" class="status disconnected"><span class="dot"></span><span id="connectionText">正在連線…</span></div>
+        <div class="status"><span>最後收到資料：</span><strong id="lastMessage">尚無資料</strong></div>
+      </div>
+      <div class="actions">
+        <button id="soundToggleBtn" class="btn btn-sound" type="button" aria-pressed="false">🔇 開啟警報音效</button>
+        <button id="testAlarmBtn" class="btn btn-test" type="button">🔔 模擬速報</button>
+        <button id="refreshHistoryBtn" class="btn btn-secondary" type="button">↻ 更新歷史紀錄</button>
+      </div>
+    </section>
+
+    <div class="notice">
+      <strong>重要提醒：</strong>本頁為第三方資料轉發與個人資訊展示工具，不是日本氣象廳官方警報設備，也不保證即時性、完整性或可用性。遇到地震時，請以日本氣象廳、地方政府及現場防災廣播資訊為準。
     </div>
 
-    <div id="eewDisplay" class="eew-card">
-        <div style="text-align: center; color: #888;">等待接收氣象廳最新數據...</div>
+    <section class="eew-card" id="eewDisplay" aria-live="assertive" aria-atomic="true">
+      <div class="card-top">
+        <h2 class="card-title" id="cardTitle">等待地震速報資料</h2>
+        <span class="state-pill" id="cardState">監聽中</span>
+      </div>
+      <div class="data-grid" id="cardData">
+        <div class="data-cell"><span class="data-label">資料狀態</span><span class="data-value">等待 P2Pquake 推播</span></div>
+        <div class="data-cell"><span class="data-label">資料來源</span><span class="data-value">P2P地震情報 API v2</span></div>
+      </div>
+    </section>
+
+    <div class="dashboard-grid">
+      <div>
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>🗾 日本震央位置</h2>
+            <span class="sub">紅色標記代表震央</span>
+          </div>
+          <div id="map" role="img" aria-label="日本地震震央地圖"></div>
+          <div class="map-legend"><span><i class="legend-dot"></i>震央位置</span><span>地圖不代表預測震度或實際搖晃範圍</span></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>📍 EEW 預估影響區域</h2>
+            <span class="sub">來源：556 areas</span>
+          </div>
+          <div id="eewAreas" class="area-list"><div class="empty">目前沒有緊急地震速報區域資料。</div></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>📊 各地觀測震度</h2>
+            <span class="sub">來源：551 points</span>
+          </div>
+          <div id="pointsList" class="points-list"><div class="empty">尚無一般地震觀測資料。</div></div>
+        </section>
+      </div>
+
+      <aside>
+        <section class="panel">
+          <div class="panel-heading">
+            <h2>🕒 最近地震紀錄</h2>
+            <span class="sub">最多顯示 8 筆</span>
+          </div>
+          <div id="historyList" class="history-list"><div class="empty">正在讀取歷史資料…</div></div>
+        </section>
+        <section class="panel">
+          <div class="panel-heading"><h2>📡 系統通訊日誌</h2><span class="sub">最新紀錄在上方</span></div>
+          <div id="log" class="log" aria-live="polite"></div>
+        </section>
+      </aside>
     </div>
 
-    <!-- 震央地圖容器 -->
-    <div id="map"></div>
+    <p class="footer-note">
+      地震資訊代碼：551＝地震資訊；556＝緊急地震速報（警報）。EEW 的預估值可能隨後續報文修正，部分區域的預估到達時間可能為空值。資料缺漏、延遲或連線中斷時，請勿將畫面視為「沒有地震」。
+    </p>
+  </main>
 
-    <!-- 各縣市震度列表容器 -->
-    <div id="pointsBox" class="points-container">
-        <div class="points-title">📍 各都道府縣最大震度分布</div>
-        <div id="pointsList"></div>
-    </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    'use strict';
 
-    <h3 style="font-size: 15px; margin-bottom: 8px; color: #ccc;">即時通訊日誌</h3>
-    <div id="log"></div>
-</div>
+    // P2Pquake API v2：551 一般地震資訊、556 緊急地震速報（警報）
+    const WS_URL = 'wss://api.p2pquake.net/v2/ws';
+    const HISTORY_URL = 'https://api.p2pquake.net/v2/history?codes=551&limit=8';
 
-<!-- 引入 Leaflet 地圖庫 JS -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-<script>
-    const wsUrl = "wss://api.p2pquake.net/v2/ws";
-    let ws;
-    let audioCtx = null;
-    let isSoundEnabled = false;
-
-    const scaleMap = { 
-        10: "1", 20: "2", 30: "3", 40: "4", 
-        45: "5弱", 50: "5強", 55: "6弱", 60: "6強", 70: "7" 
+    const scaleMap = {
+      0: '0', 10: '1', 20: '2', 30: '3', 40: '4',
+      45: '5弱', 50: '5強', 55: '6弱', 60: '6強', 70: '7', 99: '程度以上'
     };
 
-    // ================= 1. 地圖初始化 (Leaflet) =================
-    const map = L.map('map').setView([36.5, 138.0], 5);
-    
-    // 改用完全免費、無需 API Key 的 OpenStreetMap 標準圖磚 (搭配 CSS 暗黑濾鏡)
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors',
-        maxZoom: 12
+    let ws = null;
+    let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    let audioCtx = null;
+    let isSoundEnabled = false;
+    let hasLiveMessage = false;
+    let hasLoadedHistory = false;
+    let lastAlarmKey = '';
+    let lastEpicenter = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    // -------------------- 地圖 --------------------
+    const map = L.map('map', { scrollWheelZoom: true }).setView([36.5, 138.0], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
     }).addTo(map);
 
     let epicenterMarker = null;
-    let epicenterCircle = null;
 
-    function updateMap(lat, lng, epicenterName, magnitude) {
-        if (!lat || !lng || lat === -200 || lng === -200) return;
+    function updateMap(lat, lng, name, magnitude) {
+      const latitude = Number(lat);
+      const longitude = Number(lng);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude === -200 || longitude === -200) {
+        addLog('地圖', '本筆資料沒有可用的震央座標');
+        return;
+      }
 
-        if (epicenterMarker) map.removeLayer(epicenterMarker);
-        if (epicenterCircle) map.removeLayer(epicenterCircle);
+      const point = L.latLng(latitude, longitude);
+      const popup = document.createElement('div');
+      const title = document.createElement('strong');
+      title.textContent = `震央：${name || '未知'}`;
+      const detail = document.createElement('div');
+      detail.textContent = `規模：${magnitude ?? '未知'}`;
+      popup.append(title, detail);
 
-        epicenterMarker = L.circleMarker([lat, lng], {
-            radius: 8,
-            fillColor: "#ff1744",
-            color: "#ffffff",
-            weight: 2,
-            opacity: 1,
-            fillOpacity: 0.9
+      if (!epicenterMarker) {
+        epicenterMarker = L.circleMarker(point, {
+          radius: 9, fillColor: '#ff304f', color: '#ffffff', weight: 2,
+          opacity: 1, fillOpacity: .95
         }).addTo(map);
+      } else {
+        epicenterMarker.setLatLng(point);
+      }
+      epicenterMarker.bindPopup(popup);
 
-        epicenterCircle = L.circle([lat, lng], {
-            color: '#ff5252',
-            fillColor: '#ff5252',
-            fillOpacity: 0.25,
-            radius: 40000
-        }).addTo(map);
-
-        epicenterMarker.bindPopup(`<b>震央：${epicenterName}</b><br>規模：M${magnitude}`).openPopup();
-        map.flyTo([lat, lng], 7, { duration: 1.5 });
+      if (!lastEpicenter || map.distance(lastEpicenter, point) > 5000) {
+        map.flyTo(point, 7, { duration: 1.1 });
+      }
+      lastEpicenter = point;
     }
 
-    // ================= 2. 音效與測試邏輯 =================
-    function enableAudio() {
+    // -------------------- 音效 --------------------
+    async function toggleAudio() {
+      try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
         isSoundEnabled = !isSoundEnabled;
-        const btn = document.getElementById("soundToggleBtn");
-        
-        if (isSoundEnabled) {
-            btn.className = "btn btn-sound enabled";
-            btn.innerHTML = "🔊 警報音效已開啟";
-            addLog("音效", "警報音效處於待命狀態");
-            playTone(660, audioCtx.currentTime, 0.1);
-        } else {
-            btn.className = "btn btn-sound";
-            btn.innerHTML = "🔇 警報音效已靜音";
-        }
+        const button = $('soundToggleBtn');
+        button.classList.toggle('enabled', isSoundEnabled);
+        button.setAttribute('aria-pressed', String(isSoundEnabled));
+        button.textContent = isSoundEnabled ? '🔊 警報音效已開啟' : '🔇 開啟警報音效';
+        addLog('音效', isSoundEnabled ? '警報音效已開啟' : '警報音效已關閉');
+        if (isSoundEnabled) playTone(660, audioCtx.currentTime, .12);
+      } catch (error) {
+        addLog('音效錯誤', error.message || '瀏覽器無法啟用音效');
+      }
+    }
+
+    function playTone(frequency, startTime, duration) {
+      if (!audioCtx) return;
+      const oscillator = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      oscillator.type = 'triangle';
+      oscillator.frequency.setValueAtTime(frequency, startTime);
+      gain.gain.setValueAtTime(.005, startTime);
+      gain.gain.linearRampToValueAtTime(.22, startTime + .02);
+      gain.gain.exponentialRampToValueAtTime(.005, startTime + duration);
+      oscillator.connect(gain);
+      gain.connect(audioCtx.destination);
+      oscillator.start(startTime);
+      oscillator.stop(startTime + duration);
     }
 
     function triggerAlarmSound() {
-        if (!isSoundEnabled || !audioCtx) return;
-        const now = audioCtx.currentTime;
-        for (let i = 0; i < 3; i++) {
-            const startTime = now + i * 0.45;
-            playTone(880, startTime, 0.18);
-            playTone(659.25, startTime + 0.2, 0.2);
-        }
+      if (!isSoundEnabled || !audioCtx) return;
+      const now = audioCtx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const start = now + i * .52;
+        playTone(880, start, .2);
+        playTone(659.25, start + .22, .22);
+      }
     }
 
-    function playTone(freq, startTime, duration) {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = "triangle";
-        osc.frequency.setValueAtTime(freq, startTime);
-        gain.gain.setValueAtTime(0.01, startTime);
-        gain.gain.linearRampToValueAtTime(0.5, startTime + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(startTime);
-        osc.stop(startTime + duration);
+    // -------------------- 卡片與安全 DOM 渲染 --------------------
+    function renderCard({ title, state, type = 'normal', rows = [] }) {
+      const card = $('eewDisplay');
+      card.className = `eew-card ${type}`.trim();
+      $('cardTitle').textContent = title;
+      $('cardState').textContent = state;
+      const data = $('cardData');
+      data.replaceChildren();
+      rows.forEach(([label, value]) => {
+        const cell = document.createElement('div');
+        cell.className = 'data-cell';
+        const labelEl = document.createElement('span');
+        labelEl.className = 'data-label';
+        labelEl.textContent = label;
+        const valueEl = document.createElement('span');
+        valueEl.className = 'data-value';
+        valueEl.textContent = value == null || value === '' ? '未知' : String(value);
+        cell.append(labelEl, valueEl);
+        data.append(cell);
+      });
     }
 
-    function testAlarm() {
-        if (!isSoundEnabled) {
-            alert("請先點擊「啟用警報音效」按鈕以解鎖聲音！");
-            return;
-        }
-        const nowStr = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-        renderCard("🚨 模擬緊急地震速報 (測試)", nowStr, "東京灣 (模擬)", "7.2", "10km", "6強", true);
-        updateMap(35.62, 139.88, "東京灣 (模擬)", "7.2");
-        
-        const mockPoints = [
-            { pref: "東京都", scale: 60 },
-            { pref: "神奈川県", scale: 55 },
-            { pref: "千葉県", scale: 50 },
-            { pref: "埼玉県", scale: 45 },
-            { pref: "茨城県", scale: 40 },
-            { pref: "静岡県", scale: 30 }
-        ];
-        renderPrefecturePoints(mockPoints);
-        addLog("測試", "觸發模擬緊急地震速報、地圖定位與警報音效");
-        triggerAlarmSound();
+    function formatMagnitude(value) {
+      if (value === null || value === undefined || value === '') return '未知';
+      const number = Number(value);
+      return Number.isFinite(number) && number >= 0 ? `M${number.toFixed(1)}` : '未知';
     }
 
-    // ================= 3. WebSocket 連線與解析 =================
-    function connect() {
-        ws = new WebSocket(wsUrl);
-
-        ws.onopen = () => {
-            const statusEl = document.getElementById("connectionStatus");
-            statusEl.className = "status connected";
-            statusEl.innerHTML = '<span class="indicator"></span>已連線至 P2Pquake';
-            addLog("系統", "WebSocket 連線成功，開始監聽推播");
-            fetchLatestEarthquake();
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.code === 551) {
-                    parseEarthquakeInfo(data, true);
-                } else if (data.code === 556) {
-                    parseEEW(data);
-                }
-            } catch (e) {
-                console.error("JSON 解析錯誤", e);
-            }
-        };
-
-        ws.onclose = () => {
-            const statusEl = document.getElementById("connectionStatus");
-            statusEl.className = "status";
-            statusEl.innerHTML = '<span class="indicator"></span>連線中斷，重連中...';
-            setTimeout(connect, 5000);
-        };
+    function formatDepth(value) {
+      if (value === null || value === undefined || value === '') return '未知';
+      const number = Number(value);
+      return Number.isFinite(number) && number >= 0 ? `${Math.floor(number)} km` : '未知';
     }
 
-    async function fetchLatestEarthquake() {
-        try {
-            const res = await fetch("https://api.p2pquake.net/v2/history?codes=551&limit=1");
-            const list = await res.json();
-            if (list && list.length > 0) {
-                parseEarthquakeInfo(list[0], false);
-                addLog("系統", "已載入最近一筆歷史地震紀錄");
-            }
-        } catch (e) {
-            console.error("無法取得歷史資料", e);
-        }
+    function formatScale(value) {
+      if (value === null || value === undefined || value === '') return '未知';
+      return scaleMap[Math.floor(Number(value))] ?? '未知';
     }
 
+    function formatScaleRange(from, to) {
+      const fromLabel = formatScale(from);
+      const toLabel = formatScale(to);
+      return fromLabel === toLabel ? fromLabel : `${fromLabel}～${toLabel}`;
+    }
+
+    function updateLastMessage() {
+      $('lastMessage').textContent = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+    }
+
+    // -------------------- 551：一般地震資訊 --------------------
     function parseEarthquakeInfo(data, isLive) {
-        const hypocenter = data.earthquake?.hypocenter || {};
-        const time = data.earthquake?.time || data.issue?.time || "未知";
-        const epicenter = hypocenter.name || "未知";
-        const magnitude = hypocenter.magnitude !== -1 ? hypocenter.magnitude : "未知";
-        const depth = hypocenter.depth !== -1 ? `${hypocenter.depth}km` : "極淺";
-        const rawScale = data.earthquake?.maxScale;
-        const maxScale = scaleMap[rawScale] || "未知";
-        const isWarning = rawScale >= 40;
-        
-        renderCard(isLive ? "地震情報 (即時確定報)" : "最新地震情報 (歷史紀錄)", time, epicenter, magnitude, depth, maxScale, isWarning);
-        updateMap(hypocenter.latitude, hypocenter.longitude, epicenter, magnitude);
-        renderPrefecturePoints(data.points || []);
+      const earthquake = data.earthquake || {};
+      const hypocenter = earthquake.hypocenter || {};
+      const issue = data.issue || {};
+      const epicenter = hypocenter.name || '未知震央';
+      const maxScale = formatScale(earthquake.maxScale);
 
-        if (isLive) {
-            addLog("地震情報", `${epicenter} (規模: M${magnitude}, 最大震度: ${maxScale})`);
-            if (isWarning) triggerAlarmSound();
-        }
+      renderCard({
+        title: isLive ? '地震資訊（觀測／確定報）' : '最近地震資訊（歷史紀錄）',
+        state: '一般地震資訊 · 551',
+        type: 'normal',
+        rows: [
+          ['地震發生時間', earthquake.time || issue.time || '未知'],
+          ['震央位置', epicenter],
+          ['規模 / 深度', `${formatMagnitude(hypocenter.magnitude)} / ${formatDepth(hypocenter.depth)}`],
+          ['最大觀測震度', maxScale],
+          ['資訊種類', issue.type || '未知'],
+          ['資料發布時間', issue.time || data.time || '未知']
+        ]
+      });
+
+      updateMap(hypocenter.latitude, hypocenter.longitude, epicenter, formatMagnitude(hypocenter.magnitude));
+      renderObservedPoints(Array.isArray(data.points) ? data.points : []);
+      $('eewAreas').replaceChildren(createEmpty('一般地震資訊不包含本次 EEW 預估區域。'));
+
+      if (isLive) {
+        addLog('地震資訊 551', `${epicenter}｜規模 ${formatMagnitude(hypocenter.magnitude)}｜最大觀測震度 ${maxScale}`);
+        // 重要：551 是一般地震資訊，不在此處觸發 EEW 警報音效。
+      }
     }
 
+    function renderObservedPoints(points) {
+      const container = $('pointsList');
+      container.replaceChildren();
+      if (!points.length) {
+        container.append(createEmpty('本筆地震資訊沒有觀測震度列表。'));
+        return;
+      }
+
+      const maxByPrefecture = new Map();
+      points.forEach((point) => {
+        if (!point || !point.pref || !Number.isFinite(Number(point.scale))) return;
+        const scale = Number(point.scale);
+        const current = maxByPrefecture.get(point.pref);
+        if (current === undefined || scale > current) maxByPrefecture.set(point.pref, scale);
+      });
+
+      const rows = [...maxByPrefecture.entries()].sort((a, b) => b[1] - a[1]);
+      if (!rows.length) {
+        container.append(createEmpty('沒有可辨識的觀測震度資料。'));
+        return;
+      }
+      rows.forEach(([pref, scale]) => {
+        const item = document.createElement('div');
+        item.className = 'point-item';
+        const name = document.createElement('span');
+        name.className = 'point-name';
+        name.textContent = pref;
+        const badge = createScaleBadge(scale);
+        item.append(name, badge);
+        container.append(item);
+      });
+    }
+
+    // -------------------- 556：緊急地震速報（警報） --------------------
     function parseEEW(data) {
-        if (data.cancelled) {
-            addLog("EEW", "先前的緊急地震速報已取消");
-            return;
-        }
-        const hypocenter = data.earthquake?.hypocenter || {};
-        const time = data.earthquake?.originTime || "未知";
-        const epicenter = hypocenter.name || "預估中";
-        const magnitude = hypocenter.magnitude !== -1 ? hypocenter.magnitude : "預估中";
-        const depth = hypocenter.depth !== -1 ? `${hypocenter.depth}km` : "預估中";
-        
-        renderCard("🚨 緊急地震速報 (EEW)", time, epicenter, magnitude, depth, "警報發布中", true);
-        updateMap(hypocenter.latitude, hypocenter.longitude, epicenter, magnitude);
-        document.getElementById("pointsBox").style.display = "none";
-        
-        addLog("EEW 發布", `震央: ${epicenter} (預估規模: M${magnitude})`);
-        triggerAlarmSound();
+      const issue = data.issue || {};
+      const eventId = issue.eventId || 'unknown-event';
+      const serial = issue.serial || issue.time || 'unknown-serial';
+      const eventKey = `${eventId}:${serial}`;
+
+      if (data.cancelled) {
+        renderCard({
+          title: '緊急地震速報已取消', state: '取消報文 · 556', type: 'cancelled',
+          rows: [
+            ['事件編號', eventId],
+            ['速報編號', serial],
+            ['取消發布時間', issue.time || '未知'],
+            ['處理狀態', '本次速報已取消']
+          ]
+        });
+        $('eewAreas').replaceChildren(createEmpty('本次緊急地震速報已取消。'));
+        addLog('EEW 取消', `事件 ${eventId}｜速報編號 ${serial}`);
+        lastAlarmKey = eventKey;
+        return;
+      }
+
+      const earthquake = data.earthquake || {};
+      const hypocenter = earthquake.hypocenter || {};
+      const epicenter = hypocenter.name || '預估中';
+      const isTest = data.test === true;
+      const type = isTest ? 'test' : 'warning';
+      const state = isTest ? '測試資料' : '警報發布中';
+
+      renderCard({
+        title: isTest ? '緊急地震速報（測試資料）' : '🚨 緊急地震速報（警報）',
+        state: `${state} · 556`, type,
+        rows: [
+          ['地震發生時間', earthquake.originTime || '未知'],
+          ['震央位置', epicenter],
+          ['規模 / 深度', `${formatMagnitude(hypocenter.magnitude)} / ${formatDepth(hypocenter.depth)}`],
+          ['地震發現時刻（arrivalTime）', earthquake.arrivalTime || '未提供'],
+          ['事件編號', eventId],
+          ['速報編號', serial],
+          ['發布時間', issue.time || '未知'],
+          ['資料性質', isTest ? '測試資料，不視為實際警報' : (earthquake.condition || '正式速報資料')]
+        ]
+      });
+
+      updateMap(hypocenter.latitude, hypocenter.longitude, epicenter, formatMagnitude(hypocenter.magnitude));
+      renderEEWAreas(Array.isArray(data.areas) ? data.areas : []);
+      $('pointsList').replaceChildren(createEmpty('EEW 預估區域與 551 實際觀測震度是不同資料，請分開判讀。'));
+
+      addLog(isTest ? 'EEW 測試' : 'EEW 發布', `${epicenter}｜事件 ${eventId}｜速報編號 ${serial}`);
+
+      // 同一事件、同一速報編號只響一次；新速報編號代表更新，可再次提醒。
+      if (!isTest && eventKey !== lastAlarmKey) triggerAlarmSound();
+      lastAlarmKey = eventKey;
     }
 
-    // ================= 4. 畫面渲染元件 =================
-    function renderCard(title, time, epicenter, magnitude, depth, scale, isWarning) {
-        const display = document.getElementById("eewDisplay");
-        display.className = `eew-card ${isWarning ? 'warning' : ''}`;
-        
-        display.innerHTML = `
-            <h2 style="margin-top:0; font-size: 19px; color: ${isWarning ? '#ff5252' : '#4caf50'};">${title}</h2>
-            <div class="data-row"><span class="data-label">發生時間</span><span class="data-value">${time}</span></div>
-            <div class="data-row"><span class="data-label">震央位置</span><span class="data-value">${epicenter}</span></div>
-            <div class="data-row"><span class="data-label">規模 / 深度</span><span class="data-value">M${magnitude} / ${depth}</span></div>
-            <div class="data-row"><span class="data-label">最大震度</span><span class="data-value" style="color:${isWarning ? '#ff5252': '#fff'}">${scale}</span></div>
-        `;
+    function renderEEWAreas(areas) {
+      const container = $('eewAreas');
+      container.replaceChildren();
+      if (!areas.length) {
+        container.append(createEmpty('本筆 EEW 沒有提供可顯示的預估區域。'));
+        return;
+      }
+
+      areas.forEach((area) => {
+        const item = document.createElement('div');
+        item.className = 'area-item';
+        const textWrap = document.createElement('div');
+        textWrap.style.minWidth = '0';
+        const name = document.createElement('div');
+        name.className = 'area-name';
+        name.textContent = `${area.pref || '區域未明'} · ${area.name || '名稱未提供'}`;
+        const meta = document.createElement('small');
+        meta.className = 'area-meta';
+        meta.textContent = `主要動預估到達：${area.arrivalTime || '未提供'}${area.kindCode ? `｜${formatKindCode(area.kindCode)}` : ''}`;
+        textWrap.append(name, meta);
+        const badge = createScaleBadge(area.scaleFrom, formatScaleRange(area.scaleFrom, area.scaleTo));
+        item.append(textWrap, badge);
+        container.append(item);
+      });
     }
 
-    function renderPrefecturePoints(points) {
-        const box = document.getElementById("pointsBox");
-        const listEl = document.getElementById("pointsList");
-        
-        if (!points || points.length === 0) {
-            box.style.display = "none";
-            return;
+    function formatKindCode(code) {
+      const descriptions = {
+        '10': '預測主要動尚未到達',
+        '11': '預測主要動已到達',
+        '19': '未提供到達預測（PLUM 法）'
+      };
+      return descriptions[String(code)] || `速報種類代碼 ${code}`;
+    }
+
+    function createScaleBadge(scale, label) {
+      const badge = document.createElement('span');
+      const numericScale = Number(scale);
+      const hasColor = Number.isFinite(numericScale) && Object.prototype.hasOwnProperty.call(scaleMap, Math.floor(numericScale));
+      badge.className = `scale-badge${hasColor ? ` scale-${Math.floor(numericScale)}` : ''}`;
+      badge.textContent = label || `震度 ${formatScale(scale)}`;
+      return badge;
+    }
+
+    function createEmpty(message) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = message;
+      return empty;
+    }
+
+    // -------------------- 歷史紀錄 --------------------
+    async function loadRecentEarthquakes() {
+      const button = $('refreshHistoryBtn');
+      button.disabled = true;
+      button.textContent = '載入中…';
+      try {
+        const response = await fetch(HISTORY_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const list = await response.json();
+        if (!Array.isArray(list)) throw new Error('API 回傳格式不是陣列');
+        renderHistory(list);
+        if (!hasLiveMessage && list.length > 0) parseEarthquakeInfo(list[0], false);
+        hasLoadedHistory = true;
+        addLog('系統', `已載入 ${list.length} 筆近期地震資訊`);
+      } catch (error) {
+        $('historyList').replaceChildren(createEmpty(`歷史資料讀取失敗：${error.message}`));
+        addLog('歷史資料錯誤', error.message || '讀取失敗');
+      } finally {
+        button.disabled = false;
+        button.textContent = '↻ 更新歷史紀錄';
+      }
+    }
+
+    function renderHistory(list) {
+      const container = $('historyList');
+      container.replaceChildren();
+      if (!list.length) {
+        container.append(createEmpty('目前沒有歷史地震紀錄。'));
+        return;
+      }
+      list.forEach((item) => {
+        const earthquake = item.earthquake || {};
+        const hypocenter = earthquake.hypocenter || {};
+        const button = document.createElement('button');
+        button.className = 'history-item';
+        button.type = 'button';
+        const main = document.createElement('span');
+        main.className = 'history-main';
+        const title = document.createElement('strong');
+        title.textContent = hypocenter.name || '未知震央';
+        const meta = document.createElement('small');
+        meta.textContent = `${earthquake.time || item.issue?.time || '時間未知'}｜${formatMagnitude(hypocenter.magnitude)}｜最大震度 ${formatScale(earthquake.maxScale)}`;
+        main.append(title, meta);
+        const scale = createScaleBadge(earthquake.maxScale);
+        scale.textContent = formatScale(earthquake.maxScale);
+        button.append(main, scale);
+        button.addEventListener('click', () => {
+          hasLiveMessage = true;
+          parseEarthquakeInfo(item, false);
+          addLog('歷史紀錄', `檢視 ${hypocenter.name || '未知震央'}`);
+        });
+        container.append(button);
+      });
+    }
+
+    // -------------------- WebSocket 連線 --------------------
+    function setConnectionStatus(state, message) {
+      const el = $('connectionStatus');
+      el.className = `status ${state}`;
+      $('connectionText').textContent = message;
+    }
+
+    function connect() {
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      if (!navigator.onLine) {
+        setConnectionStatus('disconnected', '目前離線，等待網路恢復');
+        return;
+      }
+
+      setConnectionStatus('', '正在連線至 P2Pquake…');
+      let socket;
+      try {
+        socket = new WebSocket(WS_URL);
+        ws = socket;
+      } catch (error) {
+        scheduleReconnect();
+        addLog('WebSocket', `建立連線失敗：${error.message}`);
+        return;
+      }
+
+      socket.addEventListener('open', () => {
+        if (ws !== socket) return;
+        reconnectAttempts = 0;
+        setConnectionStatus('connected', '已連線至 P2Pquake');
+        addLog('系統', 'WebSocket 連線成功，開始接收推播');
+        if (!hasLoadedHistory) loadRecentEarthquakes();
+      });
+
+      socket.addEventListener('message', (event) => {
+        if (ws !== socket) return;
+        updateLastMessage();
+        try {
+          const data = JSON.parse(event.data);
+          switch (Number(data.code)) {
+            case 551:
+              hasLiveMessage = true;
+              parseEarthquakeInfo(data, true);
+              break;
+            case 556:
+              hasLiveMessage = true;
+              parseEEW(data);
+              break;
+            default:
+              // 其他資訊代碼目前不顯示，避免誤判為 EEW。
+              break;
+          }
+        } catch (error) {
+          console.error('WebSocket JSON 解析錯誤', error);
+          addLog('資料解析錯誤', error.message || '無法解析推播內容');
         }
+      });
 
-        const prefMaxScale = {};
-        points.forEach(pt => {
-            if (!pt.pref || !pt.scale) return;
-            if (!prefMaxScale[pt.pref] || pt.scale > prefMaxScale[pt.pref]) {
-                prefMaxScale[pt.pref] = pt.scale;
-            }
-        });
+      socket.addEventListener('error', () => {
+        if (ws === socket) setConnectionStatus('disconnected', '連線發生錯誤，準備重連');
+      });
 
-        const scaleGroups = {};
-        Object.entries(prefMaxScale).forEach(([pref, scale]) => {
-            if (!scaleGroups[scale]) scaleGroups[scale] = [];
-            scaleGroups[scale].push(pref);
-        });
+      socket.addEventListener('close', () => {
+        if (ws !== socket) return;
+        setConnectionStatus('disconnected', '連線中斷，準備重新連線');
+        addLog('系統', 'WebSocket 已中斷');
+        scheduleReconnect();
+      });
+    }
 
-        const sortedScales = Object.keys(scaleGroups).map(Number).sort((a, b) => b - a);
-        
-        let html = "";
-        sortedScales.forEach(scale => {
-            const label = scaleMap[scale] || scale;
-            const prefs = scaleGroups[scale].join("、");
-            html += `
-                <div class="scale-group">
-                    <span class="scale-badge scale-${scale}">震度 ${label}</span>
-                    <span class="pref-list">${prefs}</span>
-                </div>
-            `;
-        });
+    function scheduleReconnect() {
+      if (reconnectTimer || !navigator.onLine) return;
+      reconnectAttempts += 1;
+      const delay = Math.min(30000, 2000 * (2 ** Math.min(reconnectAttempts - 1, 4)));
+      setConnectionStatus('disconnected', `連線中斷，${Math.ceil(delay / 1000)} 秒後重試`);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delay);
+    }
 
-        listEl.innerHTML = html;
-        box.style.display = "block";
+    // -------------------- 測試與日誌 --------------------
+    function testAlarm() {
+      const now = new Date().toLocaleString('zh-TW', { hour12: false });
+      renderCard({
+        title: '🚨 緊急地震速報（畫面測試）', state: '本機模擬資料', type: 'test',
+        rows: [
+          ['地震發生時間', now], ['震央位置', '東京灣（模擬）'],
+          ['規模 / 深度', 'M7.2 / 10 km'], ['預估到達時間', '模擬資料'],
+          ['事件編號', 'TEST-0001'], ['處理狀態', isSoundEnabled ? '音效測試已啟用' : '目前為靜音']
+        ]
+      });
+      updateMap(35.62, 139.88, '東京灣（模擬）', 'M7.2');
+      renderEEWAreas([
+        { pref: '東京都', name: '東京地方', scaleFrom: 60, scaleTo: 60, arrivalTime: '模擬' },
+        { pref: '神奈川県', name: '東部', scaleFrom: 55, scaleTo: 55, arrivalTime: '模擬' },
+        { pref: '千葉県', name: '北西部', scaleFrom: 50, scaleTo: 50, arrivalTime: '模擬' }
+      ]);
+      $('pointsList').replaceChildren(createEmpty('這是測試用預估區域，不是實際觀測震度。'));
+      addLog('測試', '已顯示模擬速報；不會修改實際 API 資料');
+      triggerAlarmSound();
     }
 
     function addLog(type, message) {
-        const logDiv = document.getElementById("log");
-        const timeStr = new Date().toLocaleTimeString('zh-TW', { hour12: false });
-        const logItem = document.createElement("div");
-        logItem.className = "log-entry";
-        logItem.innerHTML = `<span style="color:#5cacee;">[${timeStr}]</span> <span style="color:#fbc02d;">[${type}]</span> ${message}`;
-        logDiv.prepend(logItem);
+      const log = $('log');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      const time = document.createElement('span');
+      time.className = 'log-time';
+      time.textContent = `[${new Date().toLocaleTimeString('zh-TW', { hour12: false })}] `;
+      const label = document.createElement('span');
+      label.className = 'log-type';
+      label.textContent = `[${type}] `;
+      const content = document.createElement('span');
+      content.textContent = String(message);
+      entry.append(time, label, content);
+      log.prepend(entry);
+      while (log.children.length > 100) log.lastElementChild.remove();
     }
 
-    connect();
-</script>
+    $('soundToggleBtn').addEventListener('click', toggleAudio);
+    $('testAlarmBtn').addEventListener('click', testAlarm);
+    $('refreshHistoryBtn').addEventListener('click', loadRecentEarthquakes);
+    window.addEventListener('online', () => {
+      addLog('網路', '網路已恢復，重新建立連線');
+      connect();
+    });
+    window.addEventListener('offline', () => {
+      setConnectionStatus('disconnected', '目前離線');
+      addLog('網路', '瀏覽器偵測到網路中斷');
+    });
 
+    addLog('系統', '頁面初始化完成');
+    connect();
+  </script>
 </body>
 </html>
