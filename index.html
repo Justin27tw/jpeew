@@ -50,6 +50,7 @@
     .panel-head h2{font-size:14px;margin:0;font-weight:800}.panel-desc{color:var(--muted);font-size:10px;text-align:right}
     .eew-card{border:1px solid #2e7357;border-left:5px solid var(--green);background:linear-gradient(120deg,#153b31,#172c31);border-radius:13px;padding:16px;margin-bottom:14px;min-height:154px}
     .eew-card.warning{border-color:#8f3b4b;border-left-color:var(--red);background:linear-gradient(120deg,#45222c,#291d2b);animation:pulse 1.6s infinite}
+    .eew-card.forecast{border-color:#3d7396;border-left-color:var(--blue);background:linear-gradient(120deg,#18354b,#172c36)}
     .eew-card.cancelled{border-color:#745e36;border-left-color:var(--orange);background:linear-gradient(120deg,#3b3020,#252a30)}
     .eew-card.test{border-color:#416b9b;border-left-color:var(--blue);background:linear-gradient(120deg,#1b3454,#1c2a3a)}
     @keyframes pulse{0%{box-shadow:0 0 0 0 #ff536455}70%{box-shadow:0 0 0 10px #ff536400}100%{box-shadow:0 0 0 0 #ff536400}}
@@ -88,7 +89,8 @@
 
   <section class="toolbar">
     <div class="statusline">
-      <div id="connectionStatus" class="status disconnected"><i class="dot"></i><span id="connectionText">正在連線…</span></div>
+      <div id="connectionStatus" class="status disconnected"><i class="dot"></i><span id="connectionText">P2Pquake 連線中…</span></div>
+      <div id="wolfxConnectionStatus" class="status disconnected"><i class="dot"></i><span id="wolfxConnectionText">Wolfx JMA EEW 連線中…</span></div>
       <div class="status">最後接收：<strong id="lastMessage">尚無資料</strong></div>
       <div class="status">接收間隔：<strong id="receiveLag">—</strong></div>
       <div class="status">P2P 節點：<strong id="peerCount">—</strong></div>
@@ -101,20 +103,20 @@
     </div>
   </section>
 
-  <div class="notice"><strong>防災安全聲明：</strong>本網站為個人資訊整合與展示工具，使用 P2P地震情報轉發資料；EEW 即時顯示接收 WebSocket 的 code 556，開啟頁面時的歷史補查只作參考、不會當成新警報。這並非日本氣象廳官方警報設備。資料可能延遲、遺失或中斷，不能取代日本氣象廳、地方政府、手機官方緊急速報及現場廣播。請勿因本網站未顯示警報而認定安全。</div>
+  <div class="notice"><strong>防災安全聲明：</strong>本網站是非官方資訊整合工具。JMA 緊急地震速報（預報／警報）主要透過 Wolfx JMA EEW WebSocket 接收，並以 HTTP 最新報文作初始補查；P2Pquake 保留地震、海嘯資訊及 556 警報備援。首次載入的舊報文只作參考，不會當成新警報。資料可能延遲、遺失或中斷，不能取代日本氣象廳、地方政府、手機官方緊急速報及現場廣播。請勿因本網站未顯示速報而認定安全。</div>
 
   <section class="kpis">
-    <div class="kpi"><div class="kpi-label">P2P 即時緊急地震速報 EEW（556）</div><div class="kpi-value" id="kpiEew">監聽中</div><div class="kpi-sub" id="kpiEewSub">WebSocket 即時等待 556 警報報文</div></div>
+    <div class="kpi"><div class="kpi-label">JMA 緊急地震速報 EEW（預報＋警報）</div><div class="kpi-value" id="kpiEew">監聽中</div><div class="kpi-sub" id="kpiEewSub">Wolfx WebSocket 即時等待預報與警報</div></div>
     <div class="kpi"><div class="kpi-label">海嘯預報</div><div class="kpi-value" id="kpiTsunami">尚無有效資訊</div><div class="kpi-sub" id="kpiTsunamiSub">等待 552 推播</div></div>
     <div class="kpi"><div class="kpi-label">最近地震資訊</div><div class="kpi-value" id="kpiQuake">尚無資料</div><div class="kpi-sub" id="kpiQuakeSub">等待 551 推播</div></div>
     <div class="kpi"><div class="kpi-label">資料接收狀態</div><div class="kpi-value" id="kpiFeed">尚未接收</div><div class="kpi-sub" id="kpiFeedSub">WebSocket 狀態與資料時間分開判斷</div></div>
   </section>
 
   <section id="mainAlert" class="eew-card">
-    <div class="card-top"><h2 class="card-title" id="mainAlertTitle">等待 P2Pquake 緊急地震速報（556）</h2><span class="pill" id="mainAlertPill">即時監聽中</span></div>
+    <div class="card-top"><h2 class="card-title" id="mainAlertTitle">等待 JMA 緊急地震速報（預報／警報）</h2><span class="pill" id="mainAlertPill">雙來源監聽中</span></div>
     <div class="data-grid" id="mainAlertData">
-      <div class="data-cell"><span class="data-label">資料狀態</span><span class="data-value">等待 P2Pquake 推播</span></div>
-      <div class="data-cell"><span class="data-label">速報種類</span><span class="data-value">EEW 556</span></div>
+      <div class="data-cell"><span class="data-label">資料狀態</span><span class="data-value">等待 JMA EEW 推播</span></div>
+      <div class="data-cell"><span class="data-label">速報種類</span><span class="data-value">預報／警報皆顯示</span></div>
       <div class="data-cell"><span class="data-label">安全提醒</span><span class="data-value">以官方資訊與現場狀況為準</span></div>
     </div>
   </section>
@@ -130,7 +132,7 @@
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>🚨 EEW 預估影響區域</h2><span class="panel-desc">來源：556 · areas</span></div>
+        <div class="panel-head"><h2>🚨 EEW 預報／警報影響區域</h2><span class="panel-desc">來源：Wolfx JMA EEW · WarnArea</span></div>
         <div id="eewAreas" class="area-list"><div class="empty">目前沒有 EEW 預估區域資料。</div></div>
       </section>
 
@@ -178,9 +180,11 @@
           <a class="source-link" href="https://www.jma.go.jp/bosai/map.html#contents=tsunami" target="_blank" rel="noopener">JMA 海嘯資訊<small>官方海嘯預報與警報</small></a>
           <a class="source-link" href="https://www.data.jma.go.jp/eew/data/ltpgm/latest.php" target="_blank" rel="noopener">長周期地震動<small>JMA 最新觀測結果</small></a>
           <a class="source-link" href="https://www.jma.go.jp/bosai/warning/" target="_blank" rel="noopener">JMA 防災警報<small>官方各類防災警報</small></a>
-          <a class="source-link" href="https://www.p2pquake.com/develop/json_api_v2/" target="_blank" rel="noopener">P2Pquake API 規格<small>本頁即時資料轉發來源</small></a>
+          <a class="source-link" href="https://www.p2pquake.com/develop/json_api_v2/" target="_blank" rel="noopener">P2Pquake API 規格<small>地震、海嘯與警報備援</small></a>
+          <a class="source-link" href="https://wolfx.jp/en/docs/open-api/" target="_blank" rel="noopener">Wolfx JMA EEW API<small>即時預報＋警報 JSON</small></a>
+          <a class="source-link" href="https://wolfx.jp/en/docs/websocket/" target="_blank" rel="noopener">Wolfx WebSocket 規格<small>即時推播與 query_jmaeew</small></a>
         </div>
-        <div class="hint">注意：P2Pquake 的 `/jma/quake`、`/jma/tsunami` 歷史端點約有 60 秒延遲，故本頁即時接收使用 WebSocket；歷史資料只用於補充查閱。</div>
+        <div class="hint">注意：JMA EEW 預報／警報由 Wolfx 專用端點接收，並以 HTTP 最新報文補查；P2Pquake 的 556 僅作警報備援。P2Pquake 歷史端點只用於補充查閱，不會當成即時警報。</div>
       </section>
 
       <section class="panel">
@@ -190,7 +194,7 @@
     </aside>
   </div>
 
-  <p class="footer"><strong>使用限制：</strong>P2Pquake API v2 的 WebSocket 可能重複推送相同資料，建議依 `id` 去重；每個 IP 的 WebSocket 連線數有限，請避免同時開啟多個本頁分頁。P2Pquake 的 EEW 轉發資料內容與配信品質無保證，不建議作為正式緊急警報唯一來源。地震波示意動畫不是預測模型；觀測震度、預測區域、推計震度及長周期地震動為不同資料，不應混為一談。</p>
+  <p class="footer"><strong>使用限制：</strong>Wolfx 是獨立營運的非官方服務，不隸屬日本氣象廳；P2Pquake 亦不保證資料內容與配信品質。兩者均可能延遲、遺失或中斷，不應作為正式緊急警報唯一來源。瀏覽器分頁關閉、裝置休眠或網路中斷時，無法保證持續接收。地震波示意動畫不是預測模型；預報區域、警報區域、觀測震度、推計震度及長周期地震動為不同資料，不應混為一談。</p>
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
@@ -200,6 +204,9 @@
 const CONFIG = {
   wsUrl: 'wss://api.p2pquake.net/v2/ws',
   historyUrl: 'https://api.p2pquake.net/v2/history',
+  wolfxWsUrl: 'wss://ws-api.wolfx.jp/jma_eew',
+  wolfxHttpUrl: 'https://api.wolfx.jp/jma_eew.json',
+  wolfxPollMs: 15000,
   historyLimit: 12,
   reconnectBaseMs: 2000,
   reconnectMaxMs: 30000,
@@ -212,6 +219,9 @@ const SCALE = {
 };
 const $ = (id) => document.getElementById(id);
 let socket = null, reconnectTimer = null, reconnectCount = 0, audioContext = null;
+let wolfxSocket = null, wolfxReconnectTimer = null, wolfxReconnectCount = 0, wolfxPollTimer = null;
+let wolfxSnapshotInitialized = false, wolfxLastSnapshotKey = null, latestWolfxEEW = null;
+let wolfxSeenReports = new Set(), wolfxLastReceiveAt = null;
 let soundEnabled = false, notificationEnabled = false, lastReceiveTime = null, historyLoadedOnce = false;
 let currentEEW = null, currentTsunami = null, latestQuake = null;
 let latestObservedPoints = [], timelineEvents = [], historyItems = [];
@@ -359,6 +369,12 @@ function playEewAlarm(update=false) {
   const now=audioContext.currentTime;
   if(update){ tone(740,now,.14,.14); tone(980,now+.17,.16,.14); return; }
   for(let i=0;i<3;i++){ const t=now+i*.54; tone(880,t,.2,.2); tone(659.25,t+.22,.22,.2); }
+}
+function playForecastAlarm(update=false) {
+  if(!soundEnabled||!audioContext)return;
+  const now=audioContext.currentTime;
+  if(update){ tone(620,now,.13,.12); tone(790,now+.16,.15,.12); return; }
+  tone(587.33,now,.18,.15); tone(783.99,now+.22,.2,.15);
 }
 function playTsunamiAlarm() {
   if(!soundEnabled||!audioContext)return;
@@ -563,6 +579,259 @@ function handleEEW(data,isLive=true,isHistory=false) {
     addLog('EEW 歷史補查',`顯示最近一筆 556：${place}｜事件 ${eventId}｜第 ${serial} 報；未播放警報。`);
   }
 }
+// Wolfx JMA EEW：同時接收 JMA「緊急地震速報（予報）」與「緊急地震速報（警報）」。
+// 文件欄位：isWarn / isFinal / isCancel，以及 WarnArea[].Type = Forecast / Warning。
+function jmaReportKey(data) {
+  return `${safeText(data.EventID,'unknown')}:${safeText(data.Serial,'0')}:${data.isCancel===true?'cancel':'report'}`;
+}
+function setWolfxConnection(state, message) {
+  $('wolfxConnectionStatus').className = `status ${state}`;
+  $('wolfxConnectionText').textContent = message;
+}
+function jmaIntensityCode(value) {
+  const v = String(value ?? '').trim();
+  if (/7/.test(v)) return 70;
+  if (/6強/.test(v)) return 60;
+  if (/6弱/.test(v)) return 55;
+  if (/5強/.test(v)) return 50;
+  if (/5弱/.test(v)) return 45;
+  if (/4/.test(v)) return 40;
+  if (/3/.test(v)) return 30;
+  if (/2/.test(v)) return 20;
+  if (/1/.test(v)) return 10;
+  if (/0/.test(v)) return 0;
+  return null;
+}
+function jmaAreaTypeLabel(type, fallbackWarning) {
+  if (String(type).toLowerCase() === 'warning') return '警報區域';
+  if (String(type).toLowerCase() === 'forecast') return '預報區域';
+  return fallbackWarning ? '警報區域' : '預報區域';
+}
+function normalizeJmaAreas(rawAreas, fallbackWarning) {
+  const list = Array.isArray(rawAreas) ? rawAreas : (rawAreas && typeof rawAreas === 'object' ? [rawAreas] : []);
+  return list.map(area => {
+    const maxIntensity = safeText(area.Shindo1, '未提供');
+    const minIntensity = safeText(area.Shindo2, '未提供');
+    return {
+      pref: '',
+      name: safeText(area.Chiiki, '未命名預報區'),
+      scaleFrom: jmaIntensityCode(area.Shindo1),
+      scaleTo: jmaIntensityCode(area.Shindo2),
+      arrivalTime: null,
+      jmaMaxIntensity: maxIntensity,
+      jmaMinIntensity: minIntensity,
+      jmaType: area.Type || (fallbackWarning ? 'Warning' : 'Forecast'),
+      jmaTypeLabel: jmaAreaTypeLabel(area.Type, fallbackWarning),
+      arrived: area.Arrive,
+      areaTime: area.Time
+    };
+  });
+}
+function renderJmaEEWAreas(areas) {
+  const box = $('eewAreas');
+  box.replaceChildren();
+  if (!areas.length) {
+    box.append(emptyNode('這筆 JMA EEW 尚未提供可顯示的 WarnArea 區域。請查看速報種類及官方原始資訊；區域清單空白不代表沒有地震風險。'));
+    return;
+  }
+  areas.forEach(area => {
+    const row = document.createElement('div'); row.className = 'item';
+    const main = document.createElement('div'); main.className = 'item-main';
+    const title = document.createElement('div'); title.className = 'item-title'; title.textContent = area.name;
+    const details = [];
+    details.push(`最大預測震度：${area.jmaMaxIntensity}`);
+    details.push(`最小預測震度：${area.jmaMinIntensity}`);
+    if (area.areaTime) details.push(`區域公告時間：${formatTime(area.areaTime)}`);
+    if (area.arrived === true) details.push('資料標示：地震波可能已抵達');
+    else if (area.arrived === false) details.push('資料標示：地震波尚未抵達');
+    const meta = document.createElement('div'); meta.className = 'item-meta'; meta.textContent = details.join('｜');
+    main.append(title, meta);
+    const badge = document.createElement('span'); badge.className = 'scale';
+    badge.style.background = String(area.jmaType).toLowerCase() === 'warning' ? '#a52b45' : '#286d8a';
+    badge.textContent = area.jmaTypeLabel;
+    row.append(main, badge); box.append(row);
+  });
+}
+function handleWolfxEEW(data, {live=true, source='Wolfx WebSocket'} = {}) {
+  if (!data || typeof data !== 'object' || !data.EventID) return;
+  const key = jmaReportKey(data);
+  if (wolfxSeenReports.has(key)) return;
+  wolfxSeenReports.add(key);
+  if (wolfxSeenReports.size > 1000) wolfxSeenReports = new Set([...wolfxSeenReports].slice(-500));
+
+  const eventId = safeText(data.EventID, '事件編號未知');
+  const serial = safeText(data.Serial, '報數未知');
+  const title = safeText(data.Title, '緊急地震速報');
+  const rawAreas = Array.isArray(data.WarnArea) ? data.WarnArea : (data.WarnArea && typeof data.WarnArea === 'object' ? [data.WarnArea] : []);
+  const isWarning = data.isWarn === true || title.includes('警報') || rawAreas.some(a => String(a?.Type).toLowerCase() === 'warning');
+  const isCancel = data.isCancel === true;
+  const isTraining = data.isTraining === true;
+  const reportTime = data.AnnouncedTime || '';
+  const originTime = data.OriginTime || '';
+  const place = safeText(data.Hypocenter, '震央位置解析中');
+  const magnitude = formatMagnitude(data.Magnitude ?? data.Magunitude);
+  const depth = formatDepth(data.Depth);
+  const areas = normalizeJmaAreas(rawAreas, isWarning);
+  const eventPrefix = `${eventId}:`;
+  const isUpdate = [...alarmedReports].some(x => x.startsWith(eventPrefix));
+  const kindLabel = isWarning ? '緊急地震速報（警報）' : '緊急地震速報（預報）';
+  const freshness = parseJstDate(reportTime);
+  const isFresh = freshness !== null && Date.now() - freshness <= 5 * 60 * 1000 && Date.now() >= freshness - 30000;
+  const shouldAlert = live && isFresh && !isTraining && !isCancel;
+  const priorTime = parseJstDate(latestWolfxEEW?.AnnouncedTime);
+  // 舊快照或舊取消報不能覆蓋較新的事件畫面。
+  if (priorTime !== null && freshness !== null && freshness < priorTime) return;
+
+  if (isCancel) {
+    if (currentEEW?.issue?.eventId && String(currentEEW.issue.eventId) === eventId) currentEEW = null;
+    latestWolfxEEW = data;
+    renderMainAlert({title:'緊急地震速報已取消',pill:`${source} · 取消報`,type:'cancelled',rows:[
+      ['速報種類',title],['事件編號',eventId],['速報編號',serial],['取消發布時間',reportTime],['原始電文狀態',safeText(data.Issue?.Status)],['資料來源','Wolfx JMA EEW']
+    ]});
+    $('kpiEew').textContent = '速報已取消';
+    $('kpiEewSub').textContent = `事件 ${eventId}｜第 ${serial} 報｜${formatTime(reportTime)}`;
+    $('eewAreas').replaceChildren(emptyNode('此事件已收到取消報文。其他地震及海嘯資訊仍須另外確認。'));
+    renderWatchResults([]);
+    if (live) {
+      updateReceiveStats({time:reportTime});
+      addLog('JMA EEW 取消',`${eventId}｜第 ${serial} 報｜${source}`);
+      pushTimeline('JMA 緊急地震速報取消',`事件 ${eventId}｜第 ${serial} 報`,reportTime,'warning');
+      notifyUser('JMA 緊急地震速報取消',`事件 ${eventId} 的速報已收到取消報文。請仍留意官方後續資訊。`);
+    }
+    return;
+  }
+
+  latestWolfxEEW = data;
+  const normalized = {
+    issue: {eventId, serial, time:reportTime},
+    earthquake: {originTime, hypocenter:{name:place, latitude:data.Latitude, longitude:data.Longitude, magnitude:data.Magnitude ?? data.Magunitude, depth:data.Depth}},
+    areas,
+    source:'Wolfx JMA EEW',
+    isWarning
+  };
+  currentEEW = normalized;
+  updateEpicenter(data.Latitude, data.Longitude, place, magnitude, isWarning ? 'EEW 警報震央' : 'EEW 預報震央');
+  renderJmaEEWAreas(areas);
+  renderWatchResults(areas);
+
+  const forecastCount = areas.filter(a => String(a.jmaType).toLowerCase() === 'forecast').length;
+  const warningCount = areas.filter(a => String(a.jmaType).toLowerCase() === 'warning').length;
+  const pill = live ? `即時收到 · ${isWarning?'警報':'預報'}` : `最新可取得報文 · 非即時警報`;
+  renderMainAlert({
+    title: isTraining ? '緊急地震速報（訓練資料）' : `${isWarning?'🚨':'📡'} ${kindLabel}`,
+    pill,
+    type: isTraining ? 'test' : isWarning ? 'warning' : 'forecast',
+    rows:[
+      ['速報種類',kindLabel],['發布時間',reportTime],['地震發生時間',originTime],['震央位置',place],
+      ['規模／深度',`${magnitude}／${depth}`],['最大預測震度',safeText(data.MaxIntensity)],
+      ['事件編號',eventId],['速報編號',serial],['發布單位／狀態',`${safeText(data.Issue?.Source)}／${safeText(data.Issue?.Status)}`],
+      ['區域數量',`${areas.length}（預報 ${forecastCount}／警報 ${warningCount}）`],
+      ['是否最終報',data.isFinal===true?'是':'否'],['是否假定震源',data.isAssumption===true?'是':'否'],
+      ['資料來源',source],['訓練資料',isTraining?'是':'否']
+    ]
+  });
+  $('kpiEew').textContent = isTraining ? '收到訓練速報' : isWarning ? '收到 EEW 警報' : '收到 EEW 預報';
+  $('kpiEewSub').textContent = `事件 ${eventId}｜第 ${serial} 報｜${formatTime(reportTime)}`;
+
+  if (live) {
+    wolfxLastReceiveAt = Date.now();
+    updateReceiveStats({time:reportTime});
+    addLog(`JMA EEW ${isWarning?'警報':'預報'}`,`${place}｜事件 ${eventId}｜第 ${serial} 報｜${areas.length} 個區域｜${source}`);
+    pushTimeline(`JMA 緊急地震速報（${isWarning?'警報':'預報'}）`,`${place}｜第 ${serial} 報｜最大預測震度 ${safeText(data.MaxIntensity)}｜${areas.length} 個區域`,reportTime,'warning');
+    if (shouldAlert && !alarmedReports.has(`${eventId}:${serial}`)) {
+      alarmedReports.add(`${eventId}:${serial}`);
+      if (alarmedReports.size > 500) alarmedReports = new Set([...alarmedReports].slice(-250));
+      if (isWarning) playEewAlarm(isUpdate);
+      else playForecastAlarm(isUpdate);
+      notifyUser(`日本緊急地震速報（${isWarning?'警報':'預報'}）`,`${place}｜第 ${serial} 報｜最大預測震度 ${safeText(data.MaxIntensity)}。請立即確認 JMA 與地方政府資訊，並依現場狀況採取安全行動。`);
+    } else if (!isFresh) {
+      addLog('JMA EEW','收到的報文時間較舊，僅更新畫面，不播放新速報警報。');
+    }
+  } else {
+    addLog('JMA EEW 初始補查',`${kindLabel}｜${place}｜事件 ${eventId}｜第 ${serial} 報；不觸發即時警報。`);
+    pushTimeline(`最近一筆 JMA EEW（${isWarning?'警報':'預報'}）`,`${place}｜第 ${serial} 報｜初始補查，非即時`,reportTime,'history');
+  }
+}
+
+function processWolfxPayload(payload, options={}) {
+  if (Array.isArray(payload)) { payload.forEach(item => processWolfxPayload(item, options)); return; }
+  if (!payload || typeof payload !== 'object') return;
+  if (payload.type === 'heartbeat') {
+    try { if (wolfxSocket?.readyState === WebSocket.OPEN) wolfxSocket.send('ping'); } catch {}
+    return;
+  }
+  if (payload.type === 'pong') return;
+  if (payload.EventID) handleWolfxEEW(payload, options);
+}
+
+async function fetchWolfxSnapshot() {
+  try {
+    const response = await fetch(CONFIG.wolfxHttpUrl, {cache:'no-store'});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    if (data && data.EventID) {
+      const key = jmaReportKey(data);
+      const first = !wolfxSnapshotInitialized;
+      if (key !== wolfxLastSnapshotKey || first) {
+        handleWolfxEEW(data, {live:!first, source:'Wolfx HTTP 輪詢'});
+        wolfxLastSnapshotKey = key;
+      }
+      wolfxSnapshotInitialized = true;
+    }
+    return true;
+  } catch (error) {
+    addLog('Wolfx HTTP',`最新速報補查失敗：${error.message || '連線失敗'}；仍會嘗試 WebSocket。`);
+    return false;
+  }
+}
+
+function connectWolfx() {
+  if (wolfxSocket && (wolfxSocket.readyState === WebSocket.OPEN || wolfxSocket.readyState === WebSocket.CONNECTING)) return;
+  if (wolfxReconnectTimer) { clearTimeout(wolfxReconnectTimer); wolfxReconnectTimer = null; }
+  if (!navigator.onLine) { setWolfxConnection('disconnected','Wolfx 離線，等待網路恢復'); return; }
+  setWolfxConnection('','正在連線 Wolfx JMA EEW…');
+  let ws;
+  try { ws = new WebSocket(CONFIG.wolfxWsUrl); wolfxSocket = ws; }
+  catch (error) { addLog('Wolfx WebSocket',error.message || '無法建立連線'); scheduleWolfxReconnect(); return; }
+  ws.addEventListener('open', () => {
+    if (wolfxSocket !== ws) return;
+    wolfxReconnectCount = 0;
+    setWolfxConnection('connected','Wolfx JMA EEW 已連線');
+    addLog('Wolfx WebSocket','已連線至 JMA EEW 頻道，接收預報與警報。');
+    try { ws.send('query_jmaeew'); } catch (error) { addLog('Wolfx 查詢',error.message || '無法送出 query_jmaeew'); }
+  });
+  ws.addEventListener('message', event => {
+    if (wolfxSocket !== ws) return;
+    try {
+      if (typeof event.data === 'string') {
+        const trimmed = event.data.trim();
+        if (trimmed === 'pong' || trimmed === 'heartbeat') { if (trimmed === 'heartbeat') ws.send('ping'); return; }
+        processWolfxPayload(JSON.parse(trimmed), {live:true, source:'Wolfx WebSocket'});
+      } else if (event.data instanceof Blob) {
+        event.data.text().then(text => processWolfxPayload(JSON.parse(text), {live:true, source:'Wolfx WebSocket'})).catch(error => addLog('Wolfx 解析',error.message));
+      }
+    } catch (error) { addLog('Wolfx 資料解析',error.message || '無法解析 EEW JSON'); }
+  });
+  ws.addEventListener('error', () => {
+    if (wolfxSocket === ws) { setWolfxConnection('disconnected','Wolfx WebSocket 發生錯誤'); addLog('Wolfx WebSocket','連線錯誤，等待重新連線。'); }
+  });
+  ws.addEventListener('close', () => {
+    if (wolfxSocket !== ws) return;
+    wolfxSocket = null;
+    setWolfxConnection('disconnected','Wolfx 連線中斷，準備重連');
+    addLog('Wolfx WebSocket','連線已關閉。');
+    scheduleWolfxReconnect();
+  });
+}
+function scheduleWolfxReconnect() {
+  if (wolfxReconnectTimer || !navigator.onLine) return;
+  wolfxReconnectCount++;
+  const base = Math.min(CONFIG.reconnectMaxMs, CONFIG.reconnectBaseMs * (2 ** Math.min(wolfxReconnectCount-1, 4)));
+  const delay = Math.round(base * (.8 + Math.random() * .4));
+  setWolfxConnection('disconnected',`${Math.ceil(delay/1000)} 秒後重新連線 Wolfx`);
+  wolfxReconnectTimer = setTimeout(() => { wolfxReconnectTimer = null; connectWolfx(); }, delay);
+}
+
 function formatKindCode(code) {
   const dict={'10':'預測主要動尚未到達','11':'資料判定主要動可能已到達','19':'PLUM 法預測／未提供到達時間'};
   return dict[String(code)]||`種類代碼 ${safeText(code)}`;
@@ -610,8 +879,15 @@ function renderWatchResults(areas) {
   matches.forEach(a=>{
     const row=document.createElement('div');row.className='item highlight';row.style.marginTop='8px';
     const main=document.createElement('div');main.className='item-main';const title=document.createElement('div');title.className='item-title';title.textContent=`${a.pref} · ${a.name}`;
-    const meta=document.createElement('div');meta.className='item-meta';meta.textContent=`預測震度 ${formatScaleRange(a.scaleFrom,a.scaleTo)}｜${a.arrivalTime?formatTime(a.arrivalTime):'無到達時間資料'}`;
-    main.append(title,meta);row.append(main,makeScaleBadge(a.scaleFrom));box.append(row);
+    const meta=document.createElement('div');meta.className='item-meta';
+    if (a.jmaMaxIntensity !== undefined) {
+      const arrived = a.arrived === true ? '地震波可能已抵達' : a.arrived === false ? '地震波尚未抵達' : '未提供抵達狀態';
+      meta.textContent = `最大預測震度 ${a.jmaMaxIntensity}｜最小預測震度 ${a.jmaMinIntensity}｜${a.jmaTypeLabel}｜${arrived}`;
+    } else {
+      meta.textContent=`預測震度 ${formatScaleRange(a.scaleFrom,a.scaleTo)}｜${a.arrivalTime?formatTime(a.arrivalTime):'無到達時間資料'}`;
+    }
+    const badge = makeScaleBadge(a.scaleFrom, a.jmaMaxIntensity !== undefined ? `最大 ${a.jmaMaxIntensity}` : undefined);
+    main.append(title,meta);row.append(main,badge);box.append(row);
   });
 }
 function loadWatchSettings() {
@@ -705,7 +981,16 @@ function processMessage(data,{live=true}={}) {
     case 552: handleTsunami(data,live);break;
     case 554: handleDetection(data,live);break;
     case 555: handlePeers(data);break;
-    case 556: handleEEW(data,live);break;
+    case 556: {
+      const issue=data.issue||{};
+      const p2pKey=`${safeText(issue.eventId,'unknown')}:${safeText(issue.serial,'0')}:${data.cancelled===true?'cancel':'report'}`;
+      if (wolfxSeenReports.has(p2pKey)) {
+        addLog('P2Pquake 556','此報文已由 Wolfx JMA EEW 接收，略過重複顯示。');
+      } else {
+        handleEEW(data,live);
+      }
+      break;
+    }
   }
 }
 
@@ -742,7 +1027,7 @@ async function loadHistory() {
     timelineEvents=timelineEvents.slice(0,80);renderTimeline();
     renderHistory(historyItems);
     const latestEewHistory=results[2].status==='fulfilled'?results[2].value[0]:null;
-    if(latestEewHistory && !hasReceivedLiveEEWSignal && !hasReceivedLiveEEW && !currentEEW) {
+    if(latestEewHistory && !latestWolfxEEW && !hasReceivedLiveEEWSignal && !hasReceivedLiveEEW && !currentEEW) {
       // 開啟頁面前已發布的速報不會由 WebSocket 重播；以歷史補查作參考，明確標為非即時。
       handleEEW(latestEewHistory,false,true);
     }
@@ -855,14 +1140,24 @@ $('saveWatchBtn').addEventListener('click',saveWatchSettings);
 $('waveBtn').addEventListener('click',startWaveDemo);
 $('stopWaveBtn').addEventListener('click',stopWaveDemo);
 $('resetMapBtn').addEventListener('click',resetMap);
-window.addEventListener('online',()=>{addLog('網路','偵測到網路恢復');connect();});
-window.addEventListener('offline',()=>{setConnection('disconnected','目前離線');addLog('網路','瀏覽器偵測到網路中斷');});
-window.addEventListener('beforeunload',()=>{stopWaveDemo();if(reconnectTimer)clearTimeout(reconnectTimer);if(socket)socket.close();});
+window.addEventListener('online',()=>{addLog('網路','偵測到網路恢復');connect();connectWolfx();fetchWolfxSnapshot();});
+window.addEventListener('offline',()=>{setConnection('disconnected','目前離線');setWolfxConnection('disconnected','Wolfx 離線');addLog('網路','瀏覽器偵測到網路中斷');});
+window.addEventListener('beforeunload',()=>{
+  stopWaveDemo();
+  if(reconnectTimer)clearTimeout(reconnectTimer);
+  if(wolfxReconnectTimer)clearTimeout(wolfxReconnectTimer);
+  if(wolfxPollTimer)clearInterval(wolfxPollTimer);
+  if(socket)socket.close();
+  if(wolfxSocket)wolfxSocket.close();
+});
 
 loadWatchSettings();
 updateClock();setInterval(updateClock,1000);setInterval(refreshCountdowns,1000);setInterval(updateFeedFreshness,5000);
 addLog('系統','Japan Earthquake Monitor 初始化完成');
-addLog('資料來源','EEW 即時速報：P2Pquake WebSocket API v2（code 556）；歷史補查：P2Pquake History API v2（不觸發警報）');
+addLog('資料來源','JMA EEW 預報＋警報：Wolfx WebSocket / HTTP；P2Pquake 保留 551/552/554/555 與 556 警報備援。');
+connectWolfx();
+fetchWolfxSnapshot();
+wolfxPollTimer=setInterval(fetchWolfxSnapshot,CONFIG.wolfxPollMs);
 connect();
 </script>
 </body>
